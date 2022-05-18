@@ -142,3 +142,7 @@ ETCD_API=3 etcdctl \
 --key=/etc/etcd/ssl/etcd-key.pem \
 endpoint status -w table
 ```
+
+![avatar](https://github.com/super667/kubernetes-study/blob/main/opt-component/etcd/images/etcd_status.png)
+![avatar](images/etcd_status.png)
+
