@@ -19,7 +19,7 @@ ETCD_API=3 etcdctl  \
 sanpshot save bakdata-20220412.db
 ```
 
-2.恢复etcdshuju
+2.恢复etcd数据
 
 ```shell
 ETCD_API=3 etcdctl sanpshot restore bakdata-20220412.db --data-dir=/opt/data.etcd/etcd --wal-dir=/opt/data.etcd/wal
