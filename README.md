@@ -1,2 +1,2 @@
 # kubernets-study
-kubernets学习历程
+kubernets，运维开发学习历程
