@@ -19,6 +19,8 @@
 
 ### 部署kube-apiserver
 
+#### 自定义scheduler
+
 ### 部署kube-controller-manager
 
 ### 部署kube-scheduler
