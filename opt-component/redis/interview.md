@@ -3,17 +3,19 @@
 
 # Redis常见面试题
 
+<https://www.bilibili.com/video/BV1cr4y1671t?spm_id_from=333.337.search-card.all.click>
+
 ## redis持久化策略选择
 
 ### 1. redis中的RDB备份方式
 
 bgsave开始时，会fork主机进程得到子进程，子进程共享主进程的内存数据，完成fork后读取内存数据并写入RDB文件.
-fork采用的是copy-on-write技术：
+fork采用的是[copy-on-write](/%E9%9D%A2%E8%AF%95%E6%80%BB%E7%BB%93.md)技术：
 
 + 当主进程执行读操作时，访问共享数据；
 + 当主进程执行写操作时，则会拷贝一份数据，执行写操作。
 
-_根据异步备份流程分析可得，当rdb子进程备份数据较慢时，整个redis服务所占用的内存可以达到所有数据的2倍，部署redis时，应该预留一部分内存给备份时使用。_
+_根据异步备份流程分析可得，当rdb子进程备份数据较慢时，整个redis服务所占用的内存最多可以达到所有数据的2倍，部署redis时，应该预留一部分内存给备份时使用。_
 
 ![vartar](images/redis-rdb.png)
 
@@ -40,7 +42,11 @@ flushall    # 用于清空整个redis服务器的数据
 
 ### 2. redis中的AOF备份方式
 
-备份过程
+**原理**
+AOF日志存储的是Redis服务器的顺序指令序列，AOF日志只记录对内存修改的指令记录。
+
+**AOF重写**
+Redis提供了bgrewriteaof指令用于对AOF日志进行瘦身。其原理就是开辟一个子进程对内存进行遍历操作，转换成一系列redis指令，序列化到一个新的AOF日志文件中。序列化完毕后再将操作期间发生的增量AOF日志追加到这个新的AOF日志文件中。追加完毕后就立即替代就的AOF日志文件，瘦身工作就完成了。
 
 触发命令
 
@@ -137,12 +143,41 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 #### 哨兵如何执行主从切换
 
 选择sentinel leader
-到现在为止，已经知道了master客观下线，那么就需要一个sentinel来负责故障转移，sentinel leader节点通过选举实现，具体选举过程如下：
+到现在为止，已经知道了master客观下线，那么就需要一个sentinel来负责故障转移。Sentinel集群正常运行的时候每个节点的epoch相同，当需要故障转移的时候就会在集群中选出leader执行故障转移操作。Sentinel选用了Raft协议实现了Sentinel间选举Leader的算法。Sentinel运行过程中故障转移完成，所有的sentinel又会回复平等。Leader仅仅是故障转移操作出现的角色。
+sentinel leader节点通过选举实现，具体选举过程如下：
 
-1. 判断客观下线的sentinel节点向其他sentinel节点发送SENTINEL is-master-down-by-addr ip port current_epoch runid(这时的runid是自己的runid， 每个sentinel都有一个自己运行时id)
-2. 目标sentinel回复，由于这个leader选举的过程符合先到先得的原则，举例：sentinel1判断了客观下线，向sentinel2发送了第一步中的指令，sentinel2回复了sentinel1，说选你为leader。这时候sentinel3也向sentinel2发送第一步的指令，sentinel2会直接拒绝回复
-3. 当sentinel发现选自己的节点数超过了majority的个数时，自己就是领头leader
-4. 如果没有一个sentinel达到majority的数量，等一段时间重新选举
+1. 某个sentinel认定master客观下线的节点后，该sentinel会先看自己有没有投过票，如果自己已经投过票给其他Sentinel了，在2倍故障转移的超时时间自己就不会成为leader。相当于他是一个Follower。
+2. 如果Sentinel还没有投过票，那么他就成为candidate。
+3. 和Raft描述的一样，成为Candidate，Sentinel需要完成以下几件事情：
+
++ 1）更新故障转移为start
++ 2）当前epoch加1，相当于进入一个新term，在Sentinel中epoch就是Raft协议中的term。
++ 3）更新自己的超时时间为当前时间随机加上一段时间，随机时间为1s内的随机毫秒数。
++ 4）向其他节点发送is-master-down-by-addr命令请求投票。命令会带上自己的epoch。
++ 5）给自己投一票，在Sentinel中投票的方式是把自己master结构体中的leader和leader_epoch改成投给的Sentinel和他的epoch
+
+4. 其他Sentinel会收到candidate的is-master-down-by-addr命令，如果sentinel当前epoch和candidate传递给他的epoch一样，说明他已经把自己base结构体里的leader和header_epoch改成其他candidate，相当于把票投给了其他candidate。投过票给其他sentinel后，当前epoch内自己只能成为follower。
+
+5. candidate会不断统计自己的票数，直到他发现认同自己的成为leader的票数超过一半而且超过他配置的quorum。sentinel比Raft协议增加了quorum的票数，这样一个sentinel否当选Leader还决定于他的配置quorum。
+
+6. 如果在一个选举时间内，candidate没有获得超过一半且超过他配置的quorum的票数，自己的这次选举就失败了。
+
+7. 如果在一个epoch内，没有一个canditate获得更多的票数。那么等待超过2倍故障转移的超时时间后，candidate增加epoch重新投票。
+
+8. 如果某个candidate获得超过一半且超过它配置的票数，那么他就成为了leader。
+
+9. 与Raft协议不同，Leader并不会把自己成为Leader的消息发给其他Sentinel。其他Sentinel等待Leader从slave选出master后，检测到新的master正常工作后，就会去掉客观下线的标识，从而不需要进入故障转移流程。
+
+> SENTINEL is-master-down-by-addr ip port current_epoch *
+> | 参数              |   意义          |
+> |-------------------|-----------------|-----
+> | ip                | 被sentinel判断为主观下线的主服务器的ip地址
+> | port              | 被sentinel判断为主观下线的主服务器的端口号
+> | current_epoch     | sentinel当前的配置纪元，用于选举领头sentinel
+> | runid             | 可以是*符号或者sentinel的运行ID：*符号代码命令仅仅用于检测主服务器的客观下线状态，而Sentinel的运行ID则用于选举领头Sentinel
+>
+> SENTINEL is-master-down-by-addr ip port current_epoch runid
+>
 
 故障转移
 通过上面的介绍，已经有了领头sentinel，下面就需要做故障转移
@@ -174,11 +209,49 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 
 ### 集群模式
 
-#### 槽位定位算法
+**单实例的缺点：**
+
+1. 单个redis的内存不宜过大，内存太大会导致rdb文件过大，主从同步时全量同步时间过长，实例重启时也会消耗太长的时间，特别是在云环境下，单个实例的内存往往是受限的
+2. CPU利用率：单个redis实例只能利用单个核心，单个核心完成海量数据的存取和管理工作压力会非常大。
+
+集群部署面对的挑战：
+
+#### codis
+
+#### RedisCluster
+
+##### 槽位定位算法
+
+Cluster默认会对key值用crc32算法进行hash得到一个整数值，然后用这个整数值对16384进行取模来得到某个具体的槽位。
+
+Cluster还允许用户强制某个key挂载特定槽位上，通过在key字符串里嵌入tag标记，既可以强制key所挂的槽位等于tag所在的槽位。
+
+```python
+def Hash_Slot(key):
+    s = key.index"{"
+
+```
+
+##### 槽位纠正机制
+
+**跳转**
+
+```bash
+GET x
+-MOVED 3999 127.0.0.1:6381
+```
+
+**迁移**
+
+**槽位迁移感知**
+
+client如何感知到槽位的变化呢？
+
+**容错**
+**网络抖动**
+**可能下线与确定下线**
 
 #### 为什么指定16384个槽位
-
-#### 
 
 ## 5.雪崩、击穿，穿透
 
@@ -197,7 +270,7 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 
 1. redis数据永不过期，这种方式是最可靠、最安全的，但是占用空间，内存消耗大，
 2. 将缓存失效的时间分散开，比如每个key的过期时间都是随机的。防止同一时间大量数据过期的现象发生，就不会出现同一时间全部请求都落在数据库
-3. 因为redis宕机超时缓存雪崩的问题，可以启动服务的熔断机制，暂停业务应用对缓存服务的访问，直接返回错误，但是暂停了业务应用访问缓存系统，全部业务都无法正常工作
+3. 因为redis宕机导致缓存雪崩的问题，可以启动服务的熔断机制，暂停业务应用对缓存服务的访问，直接返回错误，但是暂停了业务应用访问缓存系统，全部业务都无法正常工作
 4. 创造redis集群，对数据进行读写分离
 
 ### 击穿
@@ -210,7 +283,7 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 解决方法：
 
 1. 互斥锁， 保证同一时间只有一个业务线程更新缓存，未能获得互斥锁的的请求，要么等待锁释放后重新读取数据，要么就返回空值和默认值
-2. 不给热点数据设置过期时间，由后台异步更新缓存，或者在热点数据过期钱，提前通知后台线程更新缓存以及重新设置过期时间。
+2. 不给热点数据设置过期时间，由后台异步更新缓存，或者在热点数据过期前，提前通知后台线程更新缓存以及重新设置过期时间。
 
 ### 穿透
 
@@ -226,15 +299,173 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 
 ## redis本类型的底层编码结构
 
+redis数据结构的内部编码
+
+![](/opt-component/redis/images/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%92%8C%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81.png)
+
+
+
+
+## Redis基本结构类型及使用场景
+
 ### string
 
-### set
+字符串是最基础的类型，所有的键都是字符串类型，且字符串之外的其他几种复杂类型的元素也是字符串，字符串不能超过512M
 
-### list
+#### 常用命令
 
-### map
+```bash
+set key value [ex seconds] [px milliseconds] [nx|xx]
+```
 
-### zset
++ ex seconds: 为键设置秒级过期时间
++ px milliseconds： 为键设置毫秒级过期时间
++ nx: 键必须不存在，才可以设置成功，用于添加
++ xx：与nx相反，键必须存在才可以设置成功，用于更新
+
+获取值
+
+```bash
+get key
+```
+
+批量设置值
+
+```bash
+mset key value [key value]
+```
+
+批量获取值
+
+```bash
+mget key [key ...]
+```
+
+计数incr,decr,incrby,decrby,incrbyfloat
+
+```bash
+incr key
+```
+
++ 值是整数，返回自增后的结果
++ 值不是整数，返回错误
++ 键不存在，按照值为0自增，返回结果为1
+
+字符串长度
+
+```bash
+strlen key
+```
+
+#### 内部编码
+
++ int: 8个字节的长整型
++ embstr：小于等于39个字节的字符串，embstr与raw都使用redisObject和sts保存数据，区别在于，embstr的使用值分配了一次内存空间，而Raw需要分配两次空间。因此与raw相比，embstr的好处在于创建时少分配一次空间，删除时少释放一次空间，以及对象的所有数据连在一起，寻找方便。
++ raw：大于39个字节的字符串
+
+embstr和raw进行区分的长度是39，是因为redisObject的长度是16字节，sds的长度是9+字符串长度；因此当字符串长度是39字节时，embstr的长度正好是16+9+39=64字节，jemalloc正好可以分配64字节的内存单元。
+
+```bash
+set key "hello world"
+object encoding key
+```
+
+#### 使用场景
+
+1. 缓存功能：Redis作为缓存层，MySQL作为存储层，绝大部分请求的数据都从redis中读取。Redis具有支持高并发的特性，能够起到加速读写和降低后端压力的作用
+2. 计数
+3. 共享session：用Redis将用户的Session进行集中管理，只要保证Redis是高可用和扩展性的，每次用户更新或者查询登录信息都直接从redis中集中获取
+4. 限速
+
+### Hash
+
+#### 常用命令
+
+|  命令            |     时间复杂度            |
+|--------------|-----------------|
+|  hset key field value            |      O(1)           |
+|  hget key field            | O(1)                      |
+|  hdel key field [field ...] | O(k)  |
+
+#### 内部编码
+
+哈希类型的内部编码有两种：
+
++ ziplist（压缩列表）：
++ hashtable （哈希表）：
+
+与哈希表相比，压缩列表用于元素个数少，元素长度小的场景，其优势在于集中存储，节省空间；同时相对于元素的操作复杂度也由O(1)变成了O(n),由于哈希表中元素数量较少，因此操作的时间并没有明显劣势。
+
+hashtable由1个dict结构
+
+#### 编码转换
+
+redis中内层的哈希既可能使用哈希表，也可能使用压缩列表。
+只有同时满足西面两个条件才会使用压缩列表： 哈希表中的元素数量小于512个；哈希表中所有键值对的键和值字符长度都小于64字节。如果有一个条件不满足则使用哈希表；且编码只可能由压缩列表转化为哈希表，反方向则不可能。
+
+#### 使用场景
+
+### 列表
+
+#### 常用命令及复杂度
+
+#### 内部编码
+
+早期版本
+
++ ziplist：
++ linkedlist
+
+后续版本
+
++ quicklist： 后续版本对列表数据结构进行了改造，使用quicklist代替的ziplist和linkedlist
+
+#### 使用场景
+
+1. 消息队列
+2. 文章列表
+
+### 集合
+
+集合和列表类似，都是用来保存多个字符串，但集合与列表有两点不同：集合中的元素是无序的，因此不能通过索引来操作元素，集合中的元素不能有重复。
+
+#### 常用命令及时间复杂度
+
+#### 内部编码
+
+集合的内部编码是整数编码intset和哈希表hashtable
+整数集合的结构定义如下：
+
+```bash
+typedef struct inset{
+    uint32_t encoding;
+    uint32_t length;
+    int8_t contents[];
+} intset;
+```
+
+#### 编码转换
+
+只有同时满足下面两个条件时，集合才会使用整数集合：集合中元素数量小于512个；集合中所有元素都是整数值。如果有一个条件不满足，则使用哈希表；且编码只可能由整数集合转化为哈希表，反方向则不可能。
+
+#### 使用场景
+
+1. 微博点赞，收藏，标签，计算用户共同感兴趣的标签。
+2. 微博或微信中可能认识的人，共同好友，共同关注的话题等。
+
+### 有序集合
+
+#### 常用命令
+
+#### 内部编码
+
++ ziplist
++ skiplist
+
+#### 使用场景
+
+1. 榜单排名，热点排名
+2. 延时队列，优先队列
 
 ### boom filter
 
@@ -270,7 +501,10 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 
 底层实现方式以及客户端时间的应用协议不一样，redis直接自己构建了VM机制，因为一般的系统调用系统函数会浪费一定的时间去移动和请求
 
+**实现**：Redis为了保证查找的速度，只会将value交换出去，而在内存中保留所有的key。所以非常适合key很小，value很大的存储结构。redis规定，同一个数据页面只能保存一个对象，但一个对象可以保存在多个数据页面上。在redis使用的内存没有超过vm-max-memory时，是不会交换任何value到磁盘上的。当超过最大内存限制后，redis会选择较老的对象(如果两个对象一样老会优先交换比较大的对象)将它从内存中移除，这样会更加节约内存。
+
 vm相关配置
+
 ```bash
 #开启vm功能
 vm-enabled yes
@@ -282,20 +516,27 @@ vm-max-memory 1000000
 vm-page-size 32
 #设置最多能交换保存多少个页到磁盘
 vm-pages 13417728
-#设置完成交换动作的工作线程数，设置为0表示不使用工作线程而使用主线程,这会以阻塞的方式来运行。建议设置成CPU核个数
+#设置完成交换动作的工作线程数，设置为0表示不使用工作线程而使用主线程,
+#这会以阻塞的方式来运行。建议设置成CPU核个数
 vm-max-threads 4
 ```
 
-https://blog.csdn.net/Seky_fei/article/details/106843764?spm=1001.2101.3001.6661.1&utm_medium=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7ERate-1-106843764-blog-125603596.pc_relevant_default&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7ERate-1-106843764-blog-125603596.pc_relevant_default&utm_relevant_index=1
+<https://blog.csdn.net/Seky_fei/article/details/106843764?spm=1001.2101.3001.6661.1&utm_medium=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7ERate-1-106843764-blog-125603596.pc_relevant_default&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7ERate-1-106843764-blog-125603596.pc_relevant_default&utm_relevant_index=1>
+
 #### VM工作机制1：vm-max-threads=0
 
-数据换出：
-数据换入：
+**数据换出：** 主线程定期检查使用的内存大小，如果发现内存超出最大上限，会直接以阻塞的方式，将选中的对象 换出 到磁盘上(保存到文件中)，并释放对象占用的内存，此过程会一直重复直到下面条件满足任意一条才结束：
+
++ 1.内存使用降到最大限制以下。
++ 2.设置的交换文件数量达到上限。
++ 3.几乎全部的对象都被交换到磁盘了。
+
+**数据换入：** 当有client请求key对应的value已被换出到磁盘时，主线程会以阻塞的方式从换出文件中加载对应的value对象，加载时此时会阻塞所有client，然后再处理client的请求。这种方式会阻塞所有的client。
 
 #### VM工作机制2：vm-max-threads>0
 
-数据换出：
-数据换入：
+**数据换出：** 当主线程检测到使用内存超过最大上限，会将选中的要交换的数据放到一个队列中交由工作线程后台处理，主线程会继续处理client请求。
+**数据换入：** 当有client请求key的对应的value已被换出到磁盘中时，主线程先阻塞当前client，然后将加载对象的信息放到一个队列中，让工作线程去加载，此时进主线程继续处理其他client请求。加载完毕后工作线程通知主线程，主线程再执行被阻塞的client的命令。这种方式只阻塞单个client。
 
 ## redis常见性能问题和解决方案
 
@@ -313,9 +554,48 @@ https://blog.csdn.net/Seky_fei/article/details/106843764?spm=1001.2101.3001.6661
 
 ## Redis修改配置不重启Redis会实时生效吗？
 
-## redis有哪些适合的场景？
+## redis缓存一致性
 
-## redis分布式锁
+> **CAP原理：**
+>
+> + **C-Consisten,一致性**
+> + **A-Availability，可用性**
+> + **P-Partition tolerance， 分区容忍性**
+>
+> 分布式的节点往往都是分布在不同的机器上进行网络隔离开的，这意味着必然会有网络断开的风险，这个网络断开的场景的专业词汇叫**网络分区**
+> 网络分区发生的时候，两个分布式节点之间无法进行通信，我们对一个节点进行的修改无法同步到另一个节点中。所以数据的**一致性**无法满足，因为两个分布式节点的数据不在保持一致。除非我们牺牲**可用性**，就是暂停分布式节点服务，在网络分区发生时，不在提供修改数据的功能，直到网络完全恢复正常再继续对外服务。
+> ![vartar](/opt-component/redis/images/redis-cap.png)
+> 一句话概括就是——**网络发生分区时，一致性和可用性两难全**。
+
+**强一致性：** 保证写入后可以立即读取
+**弱一致性：** 不保证可以立刻读到写入的值，而是尽可能的保证在经过一定时间后可以读取到，在弱一致性的场景最为广泛的模型则是最终一致性模型，即保证在一定时间之后写入和读取达到一致的状态
+
+### 方案1
+
+## Redis使用Lua脚本时为什么能保证原子性
+
+## redis一致性Hash
+
+## scan命令与字典rehash
+
+**scan遍历顺序**
+scan遍历顺序非常特别。采用了高位进位加法来遍历，采用这样的方式进行遍历，是考虑到字典的扩容和缩容时避免槽位的遍历重复和遗漏
+
+高位进位加法从左边加，进位往右边移动，同普通加法正好相反。但是最终他们都会遍历所有的槽位并且没有重复
+
+**字典扩容**
+![var](/opt-component/redis/images/redis-rehash.png)
+
+**渐进式rehash**
+普通的字典map在扩容时会一次性将旧数组下挂接的元素全部转移到新数组下面。如果Map中元素特别多，线程就会出现卡顿现象。Redis为了解决这个问题采用了渐进式rehash。
+Redis扩容的时候会同时保留旧数组和新数组，然后再定时任务中及后续对hash的指令操作中渐渐地将旧数组中挂接的元素迁移到新的数组上。这意味着要操作处于rehash中的字典，需要同时访问新旧两个数组结构，如果在旧数组下面找不到这个元素，还需要到新数组下面去找。
+scan也要考虑这个问题，对rehash中的字典，他需要同时扫描新旧槽位，然后将结果融合后返回给客户端。
+
+## 为什么缩容不用考虑bgsave
+
+## Redis的应用
+
+### redis分布式锁
 
 > 分布式锁就是，控制分布式系统不同进程共同访问共享资源的一种锁的实现。如果不同的系统或同一系统的不同主机之间共享了某个临界资源，往往需要互斥锁来防止彼此干扰，以保证一致性
 
@@ -330,9 +610,9 @@ https://blog.csdn.net/Seky_fei/article/details/106843764?spm=1001.2101.3001.6661
 使用redis锁的注意事项
 
 1. 不要用于较长时间的任务
-2. 
+2.
 
-### Redis分布式锁方案1: SET EX PX NX + del
+#### Redis分布式锁方案1: SET EX PX NX + del
 
 下面的指令就组合成了分布式锁，setnx expire是原子操作。这个实现没有解决超时问题
 
@@ -343,7 +623,7 @@ OK
 > del
 ```
 
-### Redis分布式锁方案2:(超时)SET EX PX NX + 校验唯一随机值，再释放锁
+#### Redis分布式锁方案2:(超时)SET EX PX NX + 校验唯一随机值，再释放锁
 
 方案1存在的问题：当加锁和释放锁之间的逻辑执行的太长，以致于超出了锁的超时限制，锁被释放。
 第二个线程重新持有了这把锁，但是第一个线程执行完了业务逻辑，就把锁释放了。第三个线程会在第二个线程逻辑执行完之前拿到了锁。
@@ -368,7 +648,7 @@ end
 
 > Redis使用Lua脚本时为什么能保证原子性？
 
-### Redis分布式锁方案3:(可重入性)
+#### Redis分布式锁方案3:(可重入性)
 
 可重入性是指线程再持有锁的情况下再次请求加锁，如果一个线程支持同一个线程的多次加锁，那么这个锁就是可重入的。redis分布式锁如果要支持可重入，需要对客户端的set方法进行包装，使用线程的Threadlocal变量存储当前持有锁的计数
 
@@ -414,7 +694,7 @@ print "unlock", unlock(client, "codehole")
 print "unlock", unlock(client, "codehole")
 ```
 
-### Redis分布式锁方案3:(续期)
+#### Redis分布式锁方案3:(续期)
 
 **Watchdog** 设计原则
 
@@ -429,7 +709,6 @@ print "unlock", unlock(client, "codehole")
 基于上述的设计原则，协程是非常好的watchdog实现选型。watchdog协程与用户的工作携程处在同一个线程，当用户的携程出现问题之后，该线程报错，进而也就终止了watchdog的工作，那我watchdog就不会自动续约，锁在一段时间之后就会自动过期
 
 当加锁的时候，用户没有
-
 
 ```python
     #代码有删减
@@ -499,9 +778,9 @@ print "unlock", unlock(client, "codehole")
         lock.valid = False
 ```
 
-https://zhuanlan.zhihu.com/p/101913195
+<https://zhuanlan.zhihu.com/p/101913195>
 
-### 集群环境下redis分布式锁
+#### 集群环境下redis分布式锁
 
 以上三节详细分析了分布式锁的原理，他的使用比较简单，一条指令就可以完成加锁操作。不过在集群模式下，这种操作是有缺陷的，他不是绝对安全的。
 比如在sentinel集群中，主节点挂掉时，从节点取而代之，客户端没有明显感知。原先第一个客户端在主节点中申请成功了一把锁，但是这把锁还没有来得及同步到从节点，主节点突然挂掉了。然后从节点变成了主节点，这个新的节点内部没有这个锁，所以当另一个客户端过来请求加锁时，立即就批准了。这样就会导致系统中同样一把锁被两个客户端同时持有，不安全性由此产生。
@@ -525,16 +804,16 @@ Redlock使用场景：
 + 代码上需要引入额外的library，性能下降
 + 运维成本增加
 
+### 延时队列
 
-## redis缓存一致性
+### 位图
 
-> CAP原理：
+### HyperLogLog
 
-**强一致性：** 保证写入后可以立即读取
-**弱一致性：** 不保证可以立刻读到写入的值，而是尽可能的保证在经过一定时间后可以读取到，在弱一致性的场景最为广泛的模型则是最终一致性模型，即保证在一定时间之后写入和读取达到一致的状态
+### 布隆过滤器
 
-### 方案1：
+### 简单限流
 
-## Redis使用Lua脚本时为什么能保证原子性
+### 漏斗限流
 
-## redis一致性Hash
+### GeoHash
