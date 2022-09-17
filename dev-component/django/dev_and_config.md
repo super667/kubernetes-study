@@ -166,6 +166,10 @@ djcelery<https://github.com/celery/django-celery>
 
   什么是celery？
 
+使用场景：
+
+用户发起request，并等待response返回。在某些views中可能需要执行一段耗时的程序，那么用户就会等待很长时间，造成不好的用户体验，比如发邮件，手机验证码等。
+
 ```bash
 什么是celery
 ```
@@ -263,7 +267,7 @@ CELERYD_LOG_FILE = os.path.join(BASE_DIR, "logs", "celery_work.log")
 CELERYBEAT_LOG_FILE = os.path.join(BASE_DIR, "logs", "celery_beat.log")
 ```
 
-## entry
+## sentry
 
 文档地址：<https://docs.sentry.io/platforms/python/guides/django/http_errors/>
 github：<https://github.com/getsentry/self-hosted>
@@ -382,3 +386,67 @@ github: <https://github.com/korfuri/django-prometheus>
 ```bash
 pip3 install django-prometheus
 ```
+
+## Django面试题
+
+### django的生命周期
+
+1. wsgi,请求封装后交给web 应用框架
+2. 中间件，对请求进行校验或者在请求对象中添加其他相关数据
+3. 路由匹配，根据浏览器发送的不同url去匹配不同的视图函数
+4. 视图函数，在视图函数中进行业务逻辑的处理
+5. 中间件，对响应的数据进行处理
+6. wsgi, 将响应的内容发送给浏览器
+
+### 列举django中间件的5个方法？以及django中间件的应用场景
+
+1. process_request
+    接收到客户端信息后立即执行，视图函数之前
+2. process_response
+    返回到客户端信息前最后执行，视图函数之后
+3. process_view
+    拿到视图函数的名称，参数，执行process_view方法
+4. process_exception
+    视图函数出错时执行
+5. process_template_response
+    在视图函数执行完后立即执行，前提是视图返回的对象中有一个render()方法
+
+### django rest framework框架中都有哪些组件
+
+1. 序列化组件：serializers对queryset序列化以及对请求数据可是校验
+2. 路由组件router进行路由分发
+3. 视图组件ModelViewSet帮助开发者提供了一些类，并在类中提供了多个方法
+4. 认证组件
+5. 权限组件
+6. 频率组件
+7. 解析器：选择对数据解析的类在解析器类中注册parser_classes
+8. 渲染器：定义数据如何渲染到页面上，在渲染类中注册renderer_classes
+9. 分页： 对获取到的数据进行分页处理，pagination_class
+10. 版本：版本控制用来在不同的客户端使用不同的行为
+
+### django rest framework框架中的视图都可以继承哪些类
+
+class View(object)
+class APIView(View)
+class GenericAPIView(views.APIView)
+    pass
+
+class ModelViewSet(mixins.CreateModelMixin,
+                   mixins.RetrieveModelMixin,
+                   mixins.UpdateModelMixin,
+                   mixins.DestroyModelMixin,
+                   mixins.ListModelMixin,
+                   GenericViewSet):
+    pass
+
+### 简述django rest framework框架的认证流程
+
+### django rest framework如何实现用户访问频率控制
+
+### DRF继承过哪些视图类，以及他们之间的关系
+
+**第一种：** APIView遵循了CBV的模式，里面的功能比较多
+
+**第二种：** ListAPIView，RetrieveAPIView，CreateAPIView，UpdateAPIView, DestroyAPIView
+
+**第三种：** GenericViewSet、ListModelMixin,RetrieveModelMixin,CreateModelMixin,UpdateModelMixin,DestroyModelMixin。第三种则重构了APIView中的as_view()方法，结合请求方法和不同Mixin类的方法名从而进行执行不同的功能。与前面两种最主要的区别是url路由中as_view()方法中需要传值。

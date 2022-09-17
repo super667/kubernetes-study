@@ -27,7 +27,7 @@ BGP全称是Border Gateway Protocol,即边界网关协议。
 我的主机ip是10.4.7.60
 ```
 
-则node1发送给10.4.7.60的BGP信息可以看做：
+则node2发送给10.4.7.60的BGP信息可以看做：
 
 ```bash
 [BGP信息]
@@ -307,13 +307,13 @@ Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
 ![bgp](images/bgp-client-2.png)
 
 > 1. node1上的veth1和node2上的veth3,只是up状态但是没有配置IP；
-> 2. node1上netns1网络命名空间知网目的网段是1.1.1.0/24的路由，node2上netns2网络命名空间只有目的网段是1.1.2.0/24的路由
+> 2. node1上netns1网络命名空间的目的网段是1.1.1.0/24的路由，node2上netns2网络命名空间只有目的网段是1.1.2.0/24的路由
 
 通过上述环境准备，我们发现创建的网络命名空间内无法访问非本宿主机维护外的容器网段IP，例如node1上netns1无法访问1.1.2.0/24,因为该网络命名空间内没有对应的路由。这里calico用到了arp proxy.
 
 > **arp proxy**
 > 
-> calico为了简化网络配置，会在容器网络命名空间内添加一条网关是169.254.1.1,将容器内的路由都设置成> 一样，不需要动态更新。
+> calico为了简化网络配置，会在容器网络命名空间内添加一条网关是169.254.1.1,将容器内的路由都设置成一样，不需要动态更新。
 
 ### 重新配置出路由方向
 
@@ -372,7 +372,7 @@ calico的bird会配置一条黑洞路由，例如node1上会有一条1.1.1.0/24 
 
 >1. 数据包在node1上netns1网络协议栈组装好，通过匹配默认路由default via 169.254.1.1 dev veth2，数据包从veth2发出；
 >2. node1上从veth2出去的数据包到达veth pair的另一端；
->3. 数据包匹配bird生成的1.1.2.0/24 via 10.4.7.200 dev ens33路由，把数据包从ens33发出，到达吓一跳10.4.7.200,也就是node2；
+>3. 数据包匹配bird生成的1.1.2.0/24 via 10.4.7.200 dev ens33路由，把数据包从ens33发出，到达下一跳10.4.7.200,也就是node2；
 >4. node2上匹配路由1.1.2.2/32 dev veth3，数据包发往veth3；
 >5. node2上veth3过来的数据包到达veth pair的另一端，netns2网络命名空间下的veth4；
 >6. node2上vnetns2网络命名空间下的veth4发现1.1.2.2是自己，构造回程报文，从veth4发出；
@@ -382,7 +382,30 @@ calico的bird会配置一条黑洞路由，例如node1上会有一条1.1.1.0/24 
 >10. node1上从veth1过来的包到达veth pair的另一端，即netns1网络命名空间下的veth2
 > 11. node1上netns1网络命名空间下的veth2收到回程报文。
 
+## calico的两种网络模式的对比
 
+**IPIP:**
+流量：tunl0设备封装数据，形成隧道，承载流量
+适用网络类型：适用于互相访问的pod所在宿主机不在同一个网段，跨网段访问的场景，外层封装的ip能够解决跨网段的路由问题
+效率：流量需要tunl0设备封装，效率略低
+
+**BGP网络：**
+流量：使用路由信息导向流量
+适用网络类型：适用于访问的pod在同一个网段，适用于大型网络
+效率：原生host-gw，效率高
+
+## Calico网络优缺点分析
+
+**优点：**
+
+1. 在网络连接中性能高：calico配置第三层网络，该网络适用BGP路由协议在主机之间路由数据，不需要将数据包额外封装
+2. 支持网络策略： 网络策略是其受追捧的功能之一。此外Calico还可以与服务网格lstio集成，以便在服务网格层和网络基础架构层中解释和实施集群内工作负载的策略，这意味着用户可以配置强大的规则，描述Pod应如何发送和接受流量，提高安全性并控制网络环境。
+
+**缺点：**
+
+1. 租户隔离问题： Calico 的三层方案是直接在 host 上进行路由寻址，那么对于多租户如果使用同一个pod网络就面临着地址冲突的问题。
+2. 路由规模问题： 通过路由规则可以看出，路由规模和 pod 分布有关，如果 pod离散分布在host 集群中，势必会产生较多的路由项。
+3. iptables规模问题：1台Host 上可能虚拟化十几或几十个容器实例，过多的 iptables 规则造成复杂性和不可调试性，同时也存在性能损耗。
 
 ## calico与flannel的异同点
 
@@ -391,3 +414,6 @@ calico的bird会配置一条黑洞路由，例如node1上会有一条1.1.1.0/24 
 + calico支持kuberntes的网络策略，flanneld不支持
 + calico使用了BGP协议，flannel通过路由方式实现的一种高性能容器跨主机通信方案
 + calico支持BGP模式，IPIP模式；flanneld支持host-gw模式，VxLan模式
+
+网络性能分析，官方指标如下：
+**flannel host-gw** = **flannel  vxlan-directrouting** = **calico bgp** > **calico ipip** > **flannel vxlan-vxlan** > **flannel-udp**

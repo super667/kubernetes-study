@@ -53,7 +53,7 @@ ETCD_INITIAL_CLUSTER_STATE="existing"
 # etcd-start.sh
 export ETCD_BIN=/root/bin/etcd
 export ETCD_NAME=etcd02
-export ETCD_DATA_DIR=/opt/data/etcd
+/opt/data/centos-7-51/kubernetes-study/dev-component/imagesexport ETCD_DATA_DIR=/opt/data/etcd
 export ETCD_SNAPSHOT_COUNT=100
 export ETCD_HEARTBEAT_INTERVAL=100
 export ETCD_ELECTION_TIMEOUT=1000

@@ -107,6 +107,55 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
 > 如果数据呈现幂律分布，也就是一部分数据访问频率高，一部分数据访问频率低，则使用allkeys-lru
 > 如果数据呈现平等分布，也就是所有的数据访问频率都相同，则使用allkeys-random
 
+**LRU算法**
+使用Python的OrderedDict实现一个简单的LRU算法。
+
+```python
+from collections import OrderedDict
+
+class LRUDict(OrderedDict):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.items = OrderedDict()
+
+    def __setitem__(self, key, value):
+        old_value = self.items.get(key)
+        if old_value is noe None:
+            self.items.pop(key)
+            self.items[key] = value
+        elif len(self.items) < self.capacity:
+            self.items[key] = value
+        else:
+            self.items.popitem(last=True)
+            self.items[key] = value
+
+
+    def __getitem__(self, key):
+        value = self.items.get(key)
+        if value is not None:
+            self.items.pop(key)
+            self.items[key] = value
+        return value
+
+    def __repr__(self):
+        return repr(self.items)
+
+d = LRUDict(10)
+for i in range(15):
+    d[i] = i
+print d
+```
+
+**近似LRU算法**
+当Redis执行操作时，发现内存超出maxmemory，就会执行一次LRU淘汰算法。这个算法就是随机采样出5个key，然后淘汰掉最旧的key，如果淘汰后内存还是超出maxmemory，那就继续随机采样淘汰，知道内存低于maxmemory为止。
+如何采样通过maxmemory-policy进行配置，如果是allkeys就是从所有的key字典中随机，如果是volatile就从带过期时间的key字典中随机。每次采样多少个key看的是maxmemory_sample的配置，默认为5。
+
+```bash
+# maxmemory <bytes>
+# maxmemory-policy noeviction
+# maxmemory-samples 5
+```
+
 ## 4.redis的部署模式
 
 ### 主从模式
@@ -299,10 +348,91 @@ client如何感知到槽位的变化呢？
 
 ## redis本类型的底层编码结构
 
-redis数据结构的内部编码
+**redis数据结构的内部编码**
 
 ![](/opt-component/redis/images/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%92%8C%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81.png)
 
+Redis对象结构体
+
+```c
+struct RedisObject {
+    int4 type;       // 4bits，不同的对象具有不同的类型
+    int4 encoding;   // 4bits，同一个类型的type会有不同的存储形式
+    int24 lru;       // 24bits，
+    int32 refcount;  // 4bytes，当引用计数为0时，对象就会被销毁，内存被回收
+    void *ptr;       // 8bytes,64位操作系统
+} robj;
+```
+
+SDS结构体
+
+```c
+struct SDS {
+    int8 capacity;  //1bytes
+    int8 len;       //1bytes
+    int8 flags;     //1bytes
+    byte[] content;
+}
+```
+
+len(RedisObject) = 16
+len(SDS) = 3
+64 - len(RedisObject) - len(SDS) - 1 = 44;
+
+![](/opt-component/redis/images/redis-str-encoding.png)
+
+**压缩列表**
+
+```c
+struct ziplist<T> {
+    int32 zlbytes;          //压缩列表占用字节数
+    int32 zltail_offset;    //最后一个元素距离压缩列表起始位置的偏移量，用于快速定位最后一个节点
+    int16 zllength;         //元素个数
+    T[] entrys;             //元素内容列表，按个紧凑存储
+    int8 zlend;             //标志压缩列表的结束，值恒为0xFF
+}
+```
+
+```c
+struct entry {
+    int<var> prevlen;           //前一个entry的字节长度
+    int<var> encoding;          //元素类型编码,表示content中存储的类型
+    optional bytes[] content;   //元素内容
+}
+```
+
+**IntSet小整数集合**
+小整数集合结构体定义如下：
+
+```c
+struct intset<T> {
+    int32 encoding;    //决定整数位宽是16位，32位，还是64位
+    int32 length;      //元素个数
+    int<T> contents;   //整数数组，可以是16位，32位和64位
+}
+```
+
+**快速列表**
+redis早期版本存储list列表数据结构使用的是压缩列表ziplist和普通双向链表linkedlist，元素少的时候使用ziplist，元素多时使用linkedlist
+
+```c
+// 链表的节点
+struct listNode<T> {
+    listNode *prev;
+    listNode *next;
+    T Value;
+}
+// 链表
+struct list {
+    listNode *head;
+    listNode *tail;
+    long length;
+}
+```
+
+
+**跳跃链表**
+实现：
 
 
 
@@ -814,6 +944,59 @@ Redlock使用场景：
 
 ### 简单限流
 
+```python
+# coding: utf8
+import time
+import redis
+
+client = redis.StrictRedis()
+
+
+def is_action_allowed(user_id, action_key, period, max_count):
+    key = "hist:%s.%s" % (user_id, action_key)
+    now_ts = int(time.time() * 1000)
+    with client.pipline() as pipe:
+        # 记录行为
+        pipe.zadd(key, now_ts, now_ts)
+        # 移除时间窗口之前的行为记录，剩下的都是时间窗口内的
+        pipe.zremrangebyscore(key, 0, now_ts-period*1000)
+        # 获取窗口内的行为数量
+        pipe.zcard(key)
+        # 设置zset过期时间，避免冷用户持续占用内存，过期时间应该等于时间窗口的长度，再多宽限1s
+        pipe.expire(key, period + 1)
+        # 批量执行
+        _, _, current_count, _ = pipe.execute()
+    return current_count <= max_count
+
+
+can_reply = is_action_allowed("laoqian", "reply", 60, 5)
+if can_reply:
+    do_reply()
+else:
+    raise ActionThresholdOverflow()
+```
+
 ### 漏斗限流
+
+```python
+# coding: utf8
+
+import time
+
+class Funnel(object):
+    def __init__(self, capacity, leaking_rate):
+        self.capacity = capacity
+        self.leaking_rate = leaking_rate
+        self.left_quota = capacity
+        self.leaking_ts = time.time()
+
+    def make_space(self):
+        pass
+
+    def watering(self, quota):
+
+    
+
+```
 
 ### GeoHash
