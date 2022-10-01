@@ -46,7 +46,7 @@ flushall    # 用于清空整个redis服务器的数据
 AOF日志存储的是Redis服务器的顺序指令序列，AOF日志只记录对内存修改的指令记录。
 
 **AOF重写**
-Redis提供了bgrewriteaof指令用于对AOF日志进行瘦身。其原理就是开辟一个子进程对内存进行遍历操作，转换成一系列redis指令，序列化到一个新的AOF日志文件中。序列化完毕后再将操作期间发生的增量AOF日志追加到这个新的AOF日志文件中。追加完毕后就立即替代就的AOF日志文件，瘦身工作就完成了。
+Redis提供了bgrewriteaof指令用于对AOF日志进行瘦身。其原理就是开辟一个子进程对内存进行遍历操作，转换成一系列redis指令，序列化到一个新的AOF日志文件中。序列化完毕后再将操作期间发生的增量AOF日志追加到这个新的AOF日志文件中。追加完毕后就立即替代旧的AOF日志文件，瘦身工作就完成了。
 
 触发命令
 
@@ -78,7 +78,7 @@ Redis默认会每秒进行10次过期扫描，过期扫描不会遍历字典中�
     3.如果过期的key比率超过1/4，就重复步骤一
 ```
 
-同时保证扫描过期不会出现循环过度，导致线程卡死现象，算法还增加了扫描时间上线，默认不会超出25ms.
+同时保证扫描过期不会出现循环过度，导致线程卡死现象，算法还增加了扫描时间上限，默认不会超出25ms.
 
 ### 从库的过期策略
 
@@ -120,7 +120,7 @@ class LRUDict(OrderedDict):
 
     def __setitem__(self, key, value):
         old_value = self.items.get(key)
-        if old_value is noe None:
+        if old_value is not None:
             self.items.pop(key)
             self.items[key] = value
         elif len(self.items) < self.capacity:
@@ -531,7 +531,12 @@ hashtable由1个dict结构
 #### 编码转换
 
 redis中内层的哈希既可能使用哈希表，也可能使用压缩列表。
-只有同时满足西面两个条件才会使用压缩列表： 哈希表中的元素数量小于512个；哈希表中所有键值对的键和值字符长度都小于64字节。如果有一个条件不满足则使用哈希表；且编码只可能由压缩列表转化为哈希表，反方向则不可能。
+只有同时满足下面两个条件才会使用压缩列表： 
+
++ 1. 哈希表中的元素数量小于512个；
++ 2. 哈希表中所有键值对的键和值字符长度都小于64字节。
+
+如果有一个条件不满足则使用哈希表；且编码只可能由压缩列表转化为哈希表，反方向则不可能。
 
 #### 使用场景
 
@@ -613,23 +618,19 @@ typedef struct inset{
 
 ## redis为什么这么快
 
-### 基于内存
-
-### 高效的数据结构
-
-### 单线程模型
+1. 基于内存
+2. 高效的数据结构
+3. 单线程模型
 
 > 并发(concurrency): 指在同一时刻只能有一条指令执行，但多个进程进程可以被快速的轮换执行，是的在宏观上具有多个进程同时执行的效果，但在微观上并不是同时执行的，只是把时间分成若干时间段，使多个进程快速交替的执行
 > 并行(parallel): 指在同一时刻，有多条指令在多个处理器上同时执行。所以无论从微观上还是从宏观来看，二者都是一起执行的。
-
 > 注意：我们一直说的redis单线程，只是在处理我们的网络请求的时候只有一个线程来处理，一个正式的redis server运行的时候肯定不止一个线程的
 > 例如：redis就行持久化的时候会fork一个子进程执行持久化操作
 
-### io多路复用
+4. io多路复用
+5. 使用底层模型不同
 
-### 使用底层模型不同
-
-底层实现方式以及客户端时间的应用协议不一样，redis直接自己构建了VM机制，因为一般的系统调用系统函数会浪费一定的时间去移动和请求
+> 底层实现方式以及客户端时间的应用协议不一样，redis直接自己构建了VM机制，因为一般的系统调用系统函数会浪费一定的时间去移动和请求
 
 **实现**：Redis为了保证查找的速度，只会将value交换出去，而在内存中保留所有的key。所以非常适合key很小，value很大的存储结构。redis规定，同一个数据页面只能保存一个对象，但一个对象可以保存在多个数据页面上。在redis使用的内存没有超过vm-max-memory时，是不会交换任何value到磁盘上的。当超过最大内存限制后，redis会选择较老的对象(如果两个对象一样老会优先交换比较大的对象)将它从内存中移除，这样会更加节约内存。
 
@@ -716,12 +717,26 @@ scan遍历顺序非常特别。采用了高位进位加法来遍历，采用这�
 **字典扩容**
 ![var](/opt-component/redis/images/redis-rehash.png)
 
+**扩容条件，缩容条件**
+扩容条件：正常情况下当hash表中元素的个数等于一维数组的长度时，会开始扩容，扩容的新数组是原来数组的2倍，若redis正在做bgsave，为了减少内存页的过多分离，Redis尽量不去扩容； 如果hash表已经非常满了，元素个数达到了一维数组的5倍，这个时候会强制扩容
+缩容条件：缩容的条件是元素个数低于数组长度的10%，缩绒不会考虑Redis是否正在做bgsave
+
 **渐进式rehash**
 普通的字典map在扩容时会一次性将旧数组下挂接的元素全部转移到新数组下面。如果Map中元素特别多，线程就会出现卡顿现象。Redis为了解决这个问题采用了渐进式rehash。
 Redis扩容的时候会同时保留旧数组和新数组，然后再定时任务中及后续对hash的指令操作中渐渐地将旧数组中挂接的元素迁移到新的数组上。这意味着要操作处于rehash中的字典，需要同时访问新旧两个数组结构，如果在旧数组下面找不到这个元素，还需要到新数组下面去找。
 scan也要考虑这个问题，对rehash中的字典，他需要同时扫描新旧槽位，然后将结果融合后返回给客户端。
 
+
+## 扩容的时候为什么要考虑bgsave
+
+1. 为什么redis在bgsave的时候尽量不要去扩容？
+
++ 如果先bgsave，再扩容，会增加内存页的过多分离（Copy On Write）
++ 如果先扩容，再bgsave，redis需要再新旧两个哈希表下去汇总数据
+
 ## 为什么缩容不用考虑bgsave
+
++ 扩容时考虑bgsave，是因为扩容的时候需要额外申请很多内存，且会从新连接链表，这样会造成很多的内存碎片，也会占用更多的内存，造成系统压力；而缩容的过程中，由于申请的内存比较小，同时会释放掉一些已经使用的内存，不会增加系统的压力，因此不用考虑是否在bgsave。
 
 ## Redis的应用
 
@@ -944,6 +959,8 @@ Redlock使用场景：
 
 ### 简单限流
 
+系统限定用户的某个行为在指定的时间里只能允许N次
+
 ```python
 # coding: utf8
 import time
@@ -978,6 +995,8 @@ else:
 
 ### 漏斗限流
 
+
+
 ```python
 # coding: utf8
 
@@ -985,18 +1004,225 @@ import time
 
 class Funnel(object):
     def __init__(self, capacity, leaking_rate):
-        self.capacity = capacity
-        self.leaking_rate = leaking_rate
-        self.left_quota = capacity
-        self.leaking_ts = time.time()
+        self.capacity = capacity            # 漏斗容量
+        self.leaking_rate = leaking_rate    # 漏斗流水速率
+        self.left_quota = capacity          # 漏斗剩余容量
+        self.leaking_ts = time.time()       # 上一次漏水时间
 
     def make_space(self):
-        pass
+        now_ts = time.time()
+        delta_ts = now_ts - self.leaking_rate     # 距离上次漏水时间过去多久
+        delta_quota = delta_ts* self.leaking_rate # 腾出了说少容量
+        if delta_quota < 1:                       # 腾出容量太少
+            return
+        self.left_quota += delta_quota            # 增加剩余容量
+        self.leaking_ts = now_ts                  # 记录当前漏水时间
+        if self.left_quota > self.capacity:       # 当前剩余容量不能高于漏斗容量
+            self.left_quota = self.capacity
 
     def watering(self, quota):
+        self.make_space()
+        if self.left_quota >= quota:
+            self.quota -= quota
+            return True
+        return False
 
-    
+    funnels = {}  # 所有的漏斗
+
+    def is_action_allowed(user_id, action_key, capacity, leaking_rate):
+        key = '%s:%s' % (user_id, action_key)
+        if not funnels:
+            funnel = Funnel(capacity, leaking_rate)
+            funnel[key] = funnel
+        return funnle.watering(1)
+
+    for i in range(20):
+        print is_action_allowed('laoqian', 'reply', 15, 0.5)
 
 ```
 
 ### GeoHash
+
+
+## info指令
+
+```bash
+127.0.0.1:6379> info
+# Server
+redis_version:6.0.0
+redis_git_sha1:00000000
+redis_git_dirty:0
+redis_build_id:6777d9c0affd18cd
+redis_mode:standalone
+os:Linux 3.10.0-1127.el7.x86_64 x86_64
+arch_bits:64
+multiplexing_api:epoll
+atomicvar_api:atomic-builtin
+gcc_version:7.3.1
+process_id:113973
+run_id:23a070e2d594764e303eb5280cce06213c72bf97
+tcp_port:6379
+uptime_in_seconds:66991
+uptime_in_days:0
+hz:10
+configured_hz:10
+lru_clock:3667773
+executable:/root/redis-server
+config_file:
+
+# Clients
+connected_clients:1                        # 正在连接的客户端数量
+client_recent_max_input_buffer:2
+client_recent_max_output_buffer:0
+blocked_clients:0
+tracking_clients:0
+clients_in_timeout_table:0
+
+# Memory
+used_memory:1390656
+used_memory_human:1.33M              # 内存分配器从操作系统分配的内存总量
+used_memory_rss:8531968
+used_memory_rss_human:8.14M          # 操作系统看到的内存占用，top命令看到的内存
+used_memory_peak:1432120
+used_memory_peak_human:1.37M         # redis内存消耗的峰值
+used_memory_peak_perc:97.10%
+used_memory_overhead:1351210
+used_memory_startup:802784
+used_memory_dataset:39446
+used_memory_dataset_perc:6.71%
+allocator_allocated:1628072
+allocator_active:1945600
+allocator_resident:4317184
+total_system_memory:8181829632
+total_system_memory_human:7.62G
+used_memory_lua:37888
+used_memory_lua_human:37.00K       # Lua脚本引擎占用的内存
+used_memory_scripts:0
+used_memory_scripts_human:0B
+number_of_cached_scripts:0
+maxmemory:0
+maxmemory_human:0B
+maxmemory_policy:noeviction
+allocator_frag_ratio:1.20
+allocator_frag_bytes:317528
+allocator_rss_ratio:2.22
+allocator_rss_bytes:2371584
+rss_overhead_ratio:1.98
+rss_overhead_bytes:4214784
+mem_fragmentation_ratio:6.33
+mem_fragmentation_bytes:7183816
+mem_not_counted_for_evict:0
+mem_replication_backlog:0
+mem_clients_slaves:0
+mem_clients_normal:16986
+mem_aof_buffer:0
+mem_allocator:jemalloc-5.1.0
+active_defrag_running:0
+lazyfree_pending_objects:0
+
+# Persistence
+loading:0
+rdb_changes_since_last_save:0
+rdb_bgsave_in_progress:0
+rdb_last_save_time:1664611447
+rdb_last_bgsave_status:ok
+rdb_last_bgsave_time_sec:0
+rdb_current_bgsave_time_sec:-1
+rdb_last_cow_size:2424832
+aof_enabled:0
+aof_rewrite_in_progress:0
+aof_rewrite_scheduled:0
+aof_last_rewrite_time_sec:-1
+aof_current_rewrite_time_sec:-1
+aof_last_bgrewrite_status:ok
+aof_last_write_status:ok
+aof_last_cow_size:0
+module_fork_in_progress:0
+module_fork_last_cow_size:0
+
+# Stats
+total_connections_received:7
+total_commands_processed:31015
+instantaneous_ops_per_sec:0          # 每秒操作数
+total_net_input_bytes:941045
+total_net_output_bytes:556889
+instantaneous_input_kbps:0.00
+instantaneous_output_kbps:0.00
+rejected_connections:0               # 因超出最大连接数据限制而拒绝客户端连接次数
+sync_full:0
+sync_partial_ok:0
+sync_partial_err:0                   # 半同步复制失败次数，失败次数太多的话修改积压缓冲区大小
+expired_keys:0
+expired_stale_perc:0.00
+expired_time_cap_reached_count:0
+expire_cycle_cpu_milliseconds:935
+evicted_keys:0
+keyspace_hits:20005
+keyspace_misses:0
+pubsub_channels:0
+pubsub_patterns:0
+latest_fork_usec:1973
+migrate_cached_sockets:0
+slave_expires_tracked_keys:0
+active_defrag_hits:0
+active_defrag_misses:0
+active_defrag_key_hits:0
+active_defrag_key_misses:0
+tracking_total_keys:0
+tracking_total_items:0
+unexpected_error_replies:0
+
+# Replication
+role:master
+connected_slaves:0
+master_replid:a824af5c8e601ac17dc3106e0a990b6e3d600840
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+master_repl_meaningful_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:1048576                # 积压缓冲区的大小，这个会影响到主从复制的效率，主从复制的过程中，追加的指令都会放到这个内存中，积压缓冲区是环形的，设置太小会覆盖掉前面的内容，从库会进入全量同步模式，消耗cpu和网络资源
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+
+# CPU
+used_cpu_sys:38.356812
+used_cpu_user:40.367301
+used_cpu_sys_children:0.024673
+used_cpu_user_children:0.033237
+
+# Modules
+
+# Cluster
+cluster_enabled:0
+
+# Keyspace
+db0:keys=10002,expires=0,avg_ttl=0
+db2:keys=1,expires=0,avg_ttl=0
+db4:keys=3,expires=0,avg_ttl=0
+
+
+```
+## Redis疑难杂症
+
+### redis有一段时间卡顿什么原因？
+
+1. 有别的操作阻塞了服务
+
++ 执行了keys命令
++ 后端执行了save命令
++ bgsave执行的太频繁
++ bgrewriteof sync
++ 达到了maxmemeory 停止了更新操作
++ redis适合读多写少的场景，当前时间段可能更新频繁
++ 主从同步延时比较大，同时设置了主从延时参数，从库不能及时同步主库数据，导致主库阻塞
+
+2. redis大量数据删除，需要从数据库中重新读取
+
++ 执行了flushall，flushdb命令
++ 大量数据过期，后台回收
+
+3. 某个读写请求确实需要耗时
+
++ 大value的做操 # 如何定位大key的存在？
++ 服务器使用了swap内存，部分数据在swap内存中

@@ -1,14 +1,18 @@
+
+
+[TOC]
+
 # 网络排查命令总结
 
-## tcpdump抓包
+## tcpdump
 
 ```bash
 host tcp and host 10.4.7.60 and port 80
 ```
 
-## tcpdump常用相关参数
+### tcpdump常用相关参数
 
-### 技巧一
+#### 技巧一
 
 - **-W：** 生成的循环文件数量，生成到最大数量后，新的报文数据会覆盖写入第一个文件，以此类推
 - **-C:** 每个文件的大小，单位是MB。
@@ -47,9 +51,12 @@ tcpdump -i any tcp and not port 22
 > 补充： 1514字节是网络层MTU的1500字节，加上帧头的14字节。所以
 > 一般不指定-s参数的抓包文件，其满载的帧大小就是1514字节
 
-## openssl使用技巧
+### openssl使用技巧
 
 ```bash
 curl -vk https://www.baidu.com
 openssl s_client -connect sharkfesteurope.wireshark.org:443
 ```
+
+## iptables
+
