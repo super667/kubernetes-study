@@ -1,0 +1,3 @@
+2022-10-01 19:50:20,377-epoll-client-demo.py[line:17] - DEBUG:connect to network server success
+2022-10-01 19:50:24,303-epoll-client-demo.py[line:17] - DEBUG:connect to network server success
+2022-10-01 19:50:25,488-epoll-client-demo.py[line:17] - DEBUG:connect to network server success

@@ -3,6 +3,16 @@
 
 # Linux基础知识
 
+## 磁盘Raid
+
+https://blog.csdn.net/ensp1/article/details/81318135
+
+### raid0
+
+### raid5
+
+### raid10
+
 ## IO多路复用
 
 epoll和select都能够提供多路I/O复用的解决方案，在现在的Linux内核中都能够支持，其中epoll是Linux特有，而select则应该是POSIX所规定，一般操作系统均有实现
@@ -122,6 +132,57 @@ epoll不存在这个问题，它只会对"活跃"的socket进行操作--- 这是
 
 ## IO调度机制
 
+https://mp.weixin.qq.com/s/sF0h8Ndla6-kEWdCy73TWw
+https://www.yisu.com/zixun/463221.html
+
+1. 查看当前系统支持的IO调度器
+
+```bash
+[root@hdss7-200 kubernetes-study]# dmesg | grep -i scheduler
+[    2.426708] io scheduler noop registered
+[    2.426711] io scheduler deadline registered (default)
+[    2.426774] io scheduler cfq registered
+[    2.426777] io scheduler mq-deadline registered
+[    2.426779] io scheduler kyber registered
+[root@hdss7-200 kubernetes-study]# 
+```
+
+2. 查看某一个硬盘使用的IO调度器
+
+```bash
+[root@hdss7-200 kubernetes-study]# cat /sys/block/sda/queue/scheduler 
+noop [deadline] cfq 
+[root@hdss7-200 kubernetes-study]# 
+```
+
+3. 修改linux系统的IO调度器
+
+修改Linux系统的 I/O调度器有三种方法，分别是使用shell命令、使用grubby命令或者修改grub配置文件，使用shell命令修改I/O调度器，只是临时修改，系统重启后，修改的调度器就会失效，要想修改默认的调度器，有两种方法使用grubby命令或者直接编辑grub配置文件。
+
+```bash
+# 1. shell命令
+echo noop > /sys/block/sdb/queue/scheduler
+# 2. 使用grubby命令
+grubby --grub --update-kernel=ALL --args="elevator=deadline"
+# 3. 使用vi编辑器修改grub配置文件
+#vi cat /etc/default/grub #修改第五行，在行尾添加# elevator= cfq  然后保存文件，重新编译配置文件， #grub2-mkconfig -o /boot/grub2/grub.cfg
+```
+
+
+
+### NOOP（NO Operation）
+
+### CFQ（Completely Fair Queuing,完全公平排队）
+
+### DEADLINE
+
+DEADLINE在CFQ的基础上，解决了IO请求饿死的极端情况
+
+### ANTICIPATORY
+
+CFQ和DEADLINE考虑的焦点在于满足零散IO请求上。 对于连续的IO请求， 比如顺序读，合并并没有做优化。
+为了满足随机IO和顺序IO混合的场景，Linux还支持ANTICIPATORY调度算法。ANTICIPATORY的在DEADLINE的基础上，为每个读IO都设置了6ms的等待时间窗口。如果在这6ms内OS收到了相邻位置的读IO请求，就可以立即满足。
+
 ## 常用命令总结
 
 ### ps
@@ -184,6 +245,25 @@ epoll不存在这个问题，它只会对"活跃"的socket进行操作--- 这是
 另一方面，但是因为我们必须要假想网络是不可靠的，你无法保证你最后发送的ACK报文会一定被对方收到，因此对方处于LAST_ACK状态下的SOCKET可能会因为超时未收到ACK报文，而重发FIN报文，所以这个TIME_WAIT状态的作用就是用来重发可能丢失的ACK报文。
 
 TCP在2MSL等待期间，定义这个连接(4元组)不能再使用，任何迟到的报文都会丢弃。设想如果没有2MSL的限制，恰好新到的连接正好满足原先的4元组，这时候连接就可能接收到网络上的延迟报文就可能干扰最新建立的连接。
+
+**大量的TIME_WAIT状态在TCP连接存在，其本质原因是什么？**
+
+1. 大量的短连接存在
+2. HTTP请求时，如果connection头部取值被设置为close时，基本都由[服务端]发起主动关闭连接
+3. TCP四次挥手关闭连接机制中，为了保证ACK重发和丢弃延迟数据，设置time_wait为2倍的MSL（报文最大存活时间）
+
+TIME_WAIT状态：
+
+1. TCP连接中，主动关闭连接的一方出现的状态。 
+2. 保持两个MSL时间，
+
+影响：
+
+1. TCP连接中，主动发现关闭的一端，会进入time_wait状态
+2. time_wait状态，默认会持续2MSL，连接一般是2*2min
+3. time_wait状态下，TCP连接占用的端口，无法再次被使用
+4. TCP端口数量上限是6.5w
+5. 大量time_wait状态存在，会导致新建TCP连接出错，address already in use: connect异常
 
 **3. 发现系统存在大量TIME_WAIT状态的连接，可以通过调整内核参数解决**
 

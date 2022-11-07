@@ -417,3 +417,5 @@ calico的bird会配置一条黑洞路由，例如node1上会有一条1.1.1.0/24 
 
 网络性能分析，官方指标如下：
 **flannel host-gw** = **flannel  vxlan-directrouting** = **calico bgp** > **calico ipip** > **flannel vxlan-vxlan** > **flannel-udp**
+
+

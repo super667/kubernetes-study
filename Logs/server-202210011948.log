@@ -1,0 +1,7 @@
+2022-10-01 19:48:47,955-epoll-server-demo.py[line:24] - INFO:start up on :8090
+2022-10-01 19:50:20,378-epoll-server-demo.py[line:47] - DEBUG:accept connection from 127.0.0.1, 34394, fd=6
+2022-10-01 19:50:20,380-epoll-server-demo.py[line:60] - DEBUG:127.0.0.1, 34394 closed
+2022-10-01 19:50:24,303-epoll-server-demo.py[line:47] - DEBUG:accept connection from 127.0.0.1, 34412, fd=6
+2022-10-01 19:50:24,309-epoll-server-demo.py[line:60] - DEBUG:127.0.0.1, 34412 closed
+2022-10-01 19:50:25,488-epoll-server-demo.py[line:47] - DEBUG:accept connection from 127.0.0.1, 34414, fd=6
+2022-10-01 19:50:25,491-epoll-server-demo.py[line:60] - DEBUG:127.0.0.1, 34414 closed
