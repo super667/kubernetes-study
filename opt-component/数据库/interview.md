@@ -365,7 +365,7 @@ mysql> EXPLAIN
 3. table： 显示sql操作那张表
 4. partitions： 官方定义为The matching partitions，值为NULL表示表未被分区
 5. type： 表示查询所使用的访问类型
-> type的值分为8种，从好到差依次为： systen>const>eq_ref>ref>range>index>ALL
+> type的值分为8种，从好到差依次为： system>const>eq_ref>ref>range>index>ALL
 ALL：Full Table Scan， MySQL将遍历全表以找到匹配的行
 index：Full Index Scan，index与ALL区别为index类型只遍历索引树
 range：只检索给定范围的行，使用一个索引来选择行
