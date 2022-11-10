@@ -1,6 +1,29 @@
+[TOC]
+
 # Prometheus使用
 
 ## Prometheus命令行格式
+
+## prometheus数据类型
+
++  Gauges：最简单、使用最多的指标，获取一个返回值，这个返回值没有变化规律，不能肯定它一定是增长或是减少的状态，采集回来是多少就是多少。比如硬盘容量、CPU内存使用率都适合使用Gauges数据类型。
++ Counters: 计数类型。数据在理想状态下应该是从0开始永远递增或者是不变。比如系统运行时间、HTTP访问量等。这类型的数据通常要借助rate、irate、topk、increase等函数来获取一个变化状态，如增长率。
++ Histograms：可以理解为柱状图的意思，常用于跟踪事件发生的规模，例如：
++ Summary：
+
+#### Histogram和Summary
+
+**相同点：**
+都包含 \<basename\>_sum,\<basename\>_count
+Histogram需要通过\<basename\>_bucket计算quantile，而summary直接存储了quantile值。
+
+**选择：** Summary结构有频繁的全局锁操作，对高并发程序性能存在一定影响。histogram仅仅是给每个桶做一个原子变量的计数就可以了，而summary要每次执行算法计算出最新的X分位value是多少，算法需要并发保护。会占用客户端的cpu和内存。
+summary的百分位是提前在客户端里指定的，在服务端观测指标数据时不能获取未指定的分为数。而histogram则可以通过promql随便指定，虽然计算的不如summary准确，但带来了灵活性。
+histogram不能得到精确的分为数，设置的bucket不合理的话，误差会非常大。会消耗服务端的计算资源。
+
+**两条经验**
+如果需要聚合（aggregate），选择histograms。
+如果比较清楚要观测的指标的范围和分布情况，选择histograms。如果需要精确的分为数选择summary。
 
 ### 1.精确匹配
 
@@ -15,6 +38,7 @@ count_netstat_wait_connections{exported_instance="log"}
 # =~ 模糊匹配
 # !~ 模糊不匹配
 count_netstat_wait_connections{exported_instance=~"web.*"}
+prometheus_http_requests_total{handler=~"/graph|/rules|/metrics"}
 ```
 
 ### 3.数值过滤
@@ -25,6 +49,38 @@ count_netstat_wait_connections{exported_instance=~"web.*"}
 # 找出 wait_connection数量 ⼤于200的 
 count_netstat_wait_connections{exported_instance=~"web.*"} > 200
 ```
+
+### 4.时间范围查询
+
+```bash
+prometheus_http_requests_total{handler="/-/reload", code="200"}[5m]
+```
+
++ s-秒
++ m-分钟
++ h-小时
++ d-天
++ w-周
++ y-年
+
+在时间序列的查询上，除了以当前时间为基准，也可以使用offset进行时间位移的操作。如以一小时前的时间点为基准，查询瞬时向量和5分钟内的范围向量。
+
+### 5.聚合操作
+
+PromQL语言提供了不少内置的聚合操作，用于对瞬时向量的样本进行聚合操作，形成一个新的序列。
+
++ sum(求和)
++ min(最小值)
++ max(最大值)
++ avg(平均值)
++ stddev(标准差)
++ stdvar(标准方差)
++ count(计数)
++ topk(前n条时序)
++ quantile(分位数)
+
+sum(prometheus_http_requests_total{}) without(code, handler, job)
+sum(prometheus_http_requests_total{} by (instance)
 
 ## 常用函数介绍及示例
 
@@ -61,7 +117,7 @@ instance函数可以把sum加和到一起的数值按照指定的方式进行一
 
 ```bash
 # 查看CPU的空闲率
-sum(increase(node_cpu_seconds_totol{mode="idle"}[1m])) by (instance)
+sum(increase(node_cpu_seconds_total{mode="idle"}[1m])) by (instance)
 # 查看CPU的使用率
 (1-sum(rate(node_cpu_seconds_total{mode="idle"}[1m])) by (instance)/sum(rate(node_cpu_seconds_total[1m])) by (instance))* 100 
 ```
