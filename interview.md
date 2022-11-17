@@ -840,6 +840,8 @@ kubectl autoscale deployment nginx-deployment --max=5 --min=1 --cpu-percent=10
 
 ### 11.服务的发布形式
 
+https://blog.csdn.net/qswdcs1/article/details/103615872
+
 + 蓝绿发布
 + 灰度发布
 + 金丝雀发布

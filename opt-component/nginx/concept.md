@@ -14,6 +14,15 @@
     - [rewrite模块if指令](#rewrite模块if指令)
   - [location模块](#location模块)
   - [如何限制客户端的并发连接数](#如何限制客户端的并发连接数)
+  - [nginx的应用场景](#nginx的应用场景)
+  - [nginx怎么处理请求](#nginx怎么处理请求)
+  - [如何使用nginx解决前端跨域问题](#如何使用nginx解决前端跨域问题)
+  - [nignx限流怎么做的？](#nignx限流怎么做的)
+  - [生产中如何设置worker进程的数量？](#生产中如何设置worker进程的数量)
+  - [nginx中常见的优化配置？](#nginx中常见的优化配置)
+    - [1.调整worker_processes数量](#1调整worker_processes数量)
+    - [2.最大化worker_connections](#2最大化worker_connections)
+    - [3.启动Gzip压缩](#3启动gzip压缩)
 
 <!-- /code_chunk_output -->
 
@@ -284,7 +293,6 @@ location = /Test1 {
 ## 如何限制客户端的并发连接数
 
 
-
 ## nginx参数优化
 
 https://www.cnblogs.com/caibaotimes/p/14990450.html
@@ -430,3 +438,43 @@ deny all;
 | server       | 指定的服务起效          |
 | location     | 满足的location下起效    |
 | limit_except | 指定的http 方法谓词起效 |
+|||
+## nginx的应用场景
+
+http服务器，nginx可以做静态服务器
+虚拟主机，可以实现在一台服务器虚拟出多个网站，例如个人网站使用的虚拟机
+反向代理，负载均衡。当网站的访问量达到一定程度后，单台服务器不能满足用户的请求时，需要多台服务器集群，这时可以使用nginx做反向代理。
+
+## nginx怎么处理请求
+
+```bash
+server {         # 第一个Server区块开始，表示一个独立的虚拟主机站点
+    listen       80； # 提供服务的端口，默认80
+    server_name  localhost; # 提供服务的域名主机名
+    location / { # 第一个location区块开始
+        root   html; # 站点的根目录，相当于Nginx的安装目录
+        index  index.html index.html;  # 默认的首页文件，多个用空格分开
+    } # 第一个location区块结果
+}
+```
+
+## 如何使用nginx解决前端跨域问题
+
+使用nginx转发请求。把跨域的接口写成本域的接口，然后将这些接口转发到真正的请求地址。
+
+## nignx限流怎么做的？
+
+## 生产中如何设置worker进程的数量？
+
+在有多个cpu的情况下，可以设置多个worker进程的数量，worker进程的数量可以设置个cpu的核心数一样多，如果在单个cpu上起多个worker进程，那么操作系统会在多个worker之间进行调度，这种情况会降低性能。
+
+## nginx中常见的优化配置？
+
+https://blog.csdn.net/qq_29974229/article/details/125718921
+
+### 1.调整worker_processes数量
+
+### 2.最大化worker_connections
+
+### 3.启动Gzip压缩
+>>>>>>> ef760a961882dea68691828b7b104a95eae7ac34

@@ -150,3 +150,93 @@ count(count_netstat_wait_connections > 200)
 ## Promethesu报警规则收集
 
 [https://awesome-prometheus-alerts.grep.to/rules#nginx]()
+
+## prometheus服务发现方式
+
+### 静态服务发现
+
+```
+- job_name: "nodes"
+# metrics_path defaults to '/metrics'
+# scheme defaults to 'http'.
+    static_configs:
+     - targets:  
+        - 10.99.31.206:9100
+        - 10.99.31.201:9100
+        - 10.99.31.202:9100
+```
+
+### file_sd_configs
+
+yaml格式
+
+```
+- targets: ['192.168.1.220:9100']
+  labels:
+    app:    'app1'
+    env:   'game1'
+    region: 'us-west-2'
+- targets: ['192.168.1.221:9100']
+  labels:
+    app:    'app2'
+    env:   'game2'
+    region: 'ap-southeast-1'
+```
+
+json格式
+
+```
+[
+  {
+    "targets": [ "192.168.1.221:29090"],
+    "labels": {
+      "app": "app1",
+      "env": "game1",
+      "region": "us-west-2"
+    }
+  },
+  {
+    "targets": [ "192.168.1.222:29090" ],
+    "labels": {
+      "app": "app2",
+      "env": "game2",
+      "region": "ap-southeast-1"
+    }
+  }
+]
+```
+
+创建prometheus配置文件/data/promtheus/conf/prometheus-file-sd.yml
+Prometheus默认每5min重新读取一次文件内容，当需要修改时，可以通过refresh_interval进行设置，例如：
+
+```bash
+  - job_name: 'file_sd_test'
+    scrape_interval: 10s
+    file_sd_configs:
+    - refresh_interval: 30s # 30s重载配置文件,prometheus会周期性的读取文件中的内容。
+      files:
+      - /data/prometheus/static_conf/*.yml
+      - /data/prometheus/static_conf/*.json
+```
+
+### eureka_sd_config
+
+```
+prometheus.yml 配置
+global:
+  scrape_interval:     10s
+  evaluation_interval: 10s
+scrape_configs:
+  - job_name: eureka
+    metrics_path: /metrics
+    eureka_sd_configs:
+    - server: <your eureka address>/eureka
+```
+
+### 基于console的服务发现
+
+
+### kubernetes_sd_configs
+
+
+https://www.cnblogs.com/sfnz/p/15619240.html
