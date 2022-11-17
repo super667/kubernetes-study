@@ -185,7 +185,26 @@ CFQ和DEADLINE考虑的焦点在于满足零散IO请求上。 对于连续的IO�
 
 ## 常用命令总结
 
-### ps
+### psip
+
+### ip
+
+```bash
+ip netns add nstest
+ip netns exec nstest ip addr
+ip link add veth-a type veth peer name veth-b
+ip addr add 10.0.0.1/24 dev veth-a
+ip link set dev veth-a up
+ip netns exec nstest ip addr add 10.0.0.2/24 dev veth-b
+ip netns exec nstest ip link set dev veth-b up
+ ping 10.0.0.2 -I veth-a
+```
+
+```bash
+ip netns exec nstest ping 10.0.0.1
+```
+
+
 
 ## 零拷贝
 
@@ -223,9 +242,7 @@ CFQ和DEADLINE考虑的焦点在于满足零散IO请求上。 对于连续的IO�
 
 ## TCP
 
-![](/images/tcp.png)
-
-
+![](./images/tcp.png)
 
 
 ### 常问面试题
@@ -320,4 +337,4 @@ net.core.somaxconn = 5                # 设置全连接队列的大小
 8. TCP握手的目的有哪些？
 9. TCP 拥塞控制？慢启动的时候窗口在什么情况下会增长？为什么会呈指数增长？
 
-
+## Cgroup

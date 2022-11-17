@@ -283,3 +283,150 @@ location = /Test1 {
 
 ## 如何限制客户端的并发连接数
 
+
+
+## nginx参数优化
+
+https://www.cnblogs.com/caibaotimes/p/14990450.html
+
+内核参数优化配置
+
+```
+net.ipv4.ip_forward = 0
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.default.accept_source_route = 0
+kernel.sysrq = 0
+kernel.core_uses_pid = 1
+net.ipv4.tcp_syncookies = 1
+kernel.msgmnb = 65536
+kernel.msgmax = 65536
+kernel.shmmax = 68719476736
+kernel.shmall = 4294967296
+net.ipv4.tcp_max_tw_buckets = 6000
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_rmem = 4096 87380 4194304
+net.ipv4.tcp_wmem = 4096 16384 4194304
+net.core.wmem_default = 8388608
+net.core.rmem_default = 8388608
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.netdev_max_backlog = 262144
+net.core.somaxconn = 262144
+net.ipv4.tcp_max_orphans = 3276800
+net.ipv4.tcp_max_syn_backlog = 262144
+net.ipv4.tcp_timestamps = 0
+net.ipv4.tcp_synack_retries = 1
+net.ipv4.tcp_syn_retries = 1
+net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_mem = 94500000 915000000 927000000
+net.ipv4.tcp_fin_timeout = 1
+net.ipv4.tcp_keepalive_time = 30
+net.ipv4.ip_local_port_range = 1024 65000
+```
+
+nginx配置文件
+
+```
+#user  nobody;
+worker_processes 4;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+
+events {
+     worker_connections 40960;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+	
+    #gzip  on;
+    
+    server {
+            listen        80;
+            server_name  www.bkxx.com bkxx.com;
+            root   "E:/project/bkxx/public";
+            location / {
+                index index.php index.html error/index.html;
+                try_files $uri $uri/ /index.php?$query_string;
+                error_page 400 /error/400.html;
+                error_page 403 /error/403.html;
+                error_page 404 /error/404.html;
+                error_page 500 /error/500.html;
+                error_page 501 /error/501.html;
+                error_page 502 /error/502.html;
+                error_page 503 /error/503.html;
+                error_page 504 /error/504.html;
+                error_page 505 /error/505.html;
+                error_page 506 /error/506.html;
+                error_page 507 /error/507.html;
+                error_page 509 /error/509.html;
+                error_page 510 /error/510.html;
+                include E:/project/bkxx/public/nginx.htaccess;
+                autoindex  off;
+            }
+            location ~ \.php(.*)$ {
+                fastcgi_pass   127.0.0.1:9000;
+                fastcgi_index  index.php;
+                fastcgi_split_path_info  ^((?U).+\.php)(/?.+)$;
+                fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+                fastcgi_param  PATH_INFO  $fastcgi_path_info;
+                fastcgi_param  PATH_TRANSLATED  $document_root$fastcgi_path_info;
+                include        fastcgi_params;
+            }
+    }
+	 client_max_body_size  50m;
+     client_body_buffer_size 60k;
+     client_body_timeout 60;
+     client_header_buffer_size 64k;
+     client_header_timeout 60;
+     error_page 400 /error/400.html;
+     error_page 403 /error/403.html;
+     error_page 404 /error/404.html;
+     error_page 500 /error/500.html;
+     error_page 501 /error/501.html;
+     error_page 502 /error/502.html;
+     error_page 503 /error/503.html;
+     error_page 504 /error/504.html;
+     error_page 505 /error/505.html;
+     error_page 506 /error/506.html;
+     error_page 507 /error/507.html;
+     error_page 509 /error/509.html;
+     error_page 510 /error/510.html;
+     
+     keepalive_requests 100;
+     large_client_header_buffers 4 64k;
+     reset_timedout_connection on;
+     send_timeout 60;
+     sendfile_max_chunk 512k;
+     server_names_hash_bucket_size 256;
+}
+worker_rlimit_nofile 100000;
+```
+
+## Nginx配置限制IP访问
+
+```
+# 允许部分ip访问
+allow 123.45.25.6;
+allow 123.68.52.125;
+allow 123.125.25.106;
+ # 禁止其余ip访问
+deny all; 
+```
+
+**屏蔽策略文件可以放在http, server, location, limit_except语句块中，我们可以根据需要合理的配置。**
+
+| 放置位置     | 效果                    |
+| ------------ | ----------------------- |
+| http         | nignx中所有服务起效     |
+| server       | 指定的服务起效          |
+| location     | 满足的location下起效    |
+| limit_except | 指定的http 方法谓词起效 |

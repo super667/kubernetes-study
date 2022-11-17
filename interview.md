@@ -65,6 +65,7 @@
 当用作缓存的时候需要注意哪些问题？
 当使用分布式锁的时候需要注意哪些问题？
 限流队列
+
 ### 2. 部署的流程？
 回答详细点，怎么发起一个部署任务，中间经历了哪些状态，如何确定部署成功
 ### 3. informer缓存的什么？
@@ -118,7 +119,15 @@ selinux(有空就看)
 ### 二面
 
 ### 1. 熟悉的设计模式
-单例模式，工厂模式，策略模式，模板模式
+单例模式：整个项目的全局配置文件
+
+工厂模式：我们想要什么对象，提供一个名称，就可以创建响应的类型
+
+策略模式：一种场景，排序算法，不同的算法在子类中实现
+
+模板模式：
+
+建造者模式，
 
 ### 2. 项目使用的web框架介绍
 ### 3. python的垃圾回收机制
@@ -162,7 +171,7 @@ python的GC模块主要运用了引用计数来跟踪和回收垃圾；通过标
 
 **变量的查找：**
 当我们使用变量时，会优先在当前作用域中寻找该变量，如果有则使用，如果没有则继续去上一级作用域中寻找，如果有则使用，如果依然没有则继续去上一级作用域中寻找，以此类推。直到找到全局作用域，依然没有找到，则会抛出异常 NameError: name 'a' is not defined。
- 
+
 
 ### 7. 数据库如何排查慢查询语句
 
@@ -263,6 +272,7 @@ upstream bakend {
 ```bash
 # ip_hash 每个请求按ip的hash结果分配，这样每个访客固定访问一个后端服务器，可以解决session不能跨服务器的问题。
 upstream backend {
+	ip_hash
     server 192.168.1.10:8080;
     server 192.168.1.10:8080;
 }
@@ -290,7 +300,7 @@ upstream resinserver {
 设备的状态有：
 + （1）down表示当前的server暂时不参与负载
 + （2）weight表示权重，默认为1，weight越大负载的权重越大
-+ （3）max_fails: 允许请求失败的次数，more为1.当超过最大次数时，返回proxy_next_upstream模块定义的错误
++ （3）max_fails: 允许请求失败的次数，默认为1.当超过最大次数时，返回proxy_next_upstream模块定义的错误
 + （4）fail_timeout: max_fails次失败后，暂停的时间；
 + (5)backup：备用服务器，当其他所有的非backup机器down或者忙的时候，请求backup机器，所以这台机器压力最轻。
 
@@ -338,10 +348,13 @@ server {
 
 ### 6. celery框架流程
 ![](/images/celery.webp)
+
+![](D:\GlobalData\Codes\kubernetes-study\images\celery.webp)
+
 celery组件如下：
 Celery Beat:任务调度器
 Celery Worker：执行任务的消费者，通常会在多台服务器运行多个消费者来提高执行效率。
-Broker： 消息代理， 或者叫做消息中间件，接收任务生产者发送过来的任务消息，存进队列再按照顺序分发给任务消费方（通常是消息队列或者数据库）
+Broker： 消息代理， 或者叫做消息中间件，接收任务生产者发送过来的任务消息，存进队列再按照顺序分发给任务消费方（通常是消息队列或者数据库)
 Producer：调用了Celery提供的API，函数或者装饰器而产生任务并交给任务队列处理的都是任务生产者
 Result Backend: 任务处理完后保存状态信息，以供查询。celery默认已支持redis，Rabbitmq，MongoDB，等方式
 
@@ -365,7 +378,227 @@ obj2 = Singleton()
 ```
 
 2. 简单工厂模式
-3. 策略模式
+
+   工厂模式是软件开发中用来创建对象的设计模式。
+
+   工厂模式包含一个超类，这个类提供一个接口来创建特定类型的对象，而不是决定哪个对象可以被创建。
+
+   
+
+   ```python
+   # encoding: utf-8
+   import math
+   
+   
+   # 现金收费基类
+   class CashSuper(object):
+       def accept_cash(self, money):
+           raise NotImplementedError
+   
+   
+   # 正常收费子类
+   class CashNormal(CashSuper):
+       def accept_cash(self, money):
+           return money
+   
+   
+   # 打折收费子类
+   class CashRebate(CashSuper):
+       def __init__(self, rebate=1.0):
+           self._rebate = rebate
+   
+       def accept_cash(self, money):
+           return money * self._rebate
+   
+   
+   # 返利收费子类
+   class CashReturn(CashSuper):
+       def __init__(self, condition=0, money_return=0):
+           self._condition = condition
+           self._return = money_return
+   
+       def accept_cash(self, money):
+           result = money
+           if money >= self._condition:
+               result = money - math.floor(money / self._condition) * self._return
+           return result
+   
+   
+   # 现金收费工厂类
+   class CashFactory(object):
+       @staticmethod
+       def create_cash_accept(cash_type):
+           cash_type_instance = None
+           if cash_type == '正常收费':
+               cash_type_instance = CashNormal()
+           elif cash_type == '打8折':
+               cash_type_instance = CashRebate(0.8)
+           elif cash_type == '满300返100':
+               cash_type_instance = CashReturn(300, 100)
+           return cash_type_instance
+   
+   
+   if __name__ == '__main__':
+       print CashFactory.create_cash_accept('正常收费').accept_cash(400)
+       print CashFactory.create_cash_accept('打8折').accept_cash(400)
+       print CashFactory.create_cash_accept('满300返100').accept_cash(400)
+   ```
+
+   
+
+3. 策略模
+
+   ```python
+   # encoding: utf-8
+   import math
+   
+   
+   # 现金收费基类
+   class CashSuper(object):
+       def accept_cash(self, money):
+           raise NotImplementedError
+   
+   
+   # 正常收费子类
+   class CashNormal(CashSuper):
+       def accept_cash(self, money):
+           return money
+   
+   
+   # 打折收费子类
+   class CashRebate(CashSuper):
+       def __init__(self, rebate=1.0):
+           self._rebate = rebate
+   
+       def accept_cash(self, money):
+           return money * self._rebate
+   
+   
+   # 返利收费子类
+   class CashReturn(CashSuper):
+       def __init__(self, condition=0, money_return=0):
+           self._condition = condition
+           self._return = money_return
+   
+       def accept_cash(self, money):
+           result = money
+           if money >= self._condition:
+               result = money - math.floor(money / self._condition) * self._return
+           return result
+   
+   
+   # 上下文类，维护一个对收费模型的引用
+   class CashContext(object):
+       def __init__(self, cash_type_instance):
+           self.cash_type_instance = cash_type_instance
+   
+       def get_result(self, money):
+           return self.cash_type_instance.accept_cash(money)
+   
+   
+   if __name__ == '__main__':
+       def init_cash_accept(cash_type):
+           cash_content = None
+           if cash_type == '正常收费':
+               cash_content = CashContext(CashNormal())
+           elif cash_type == '打8折':
+               cash_content = CashContext(CashRebate(0.8))
+           elif cash_type == '满300返100':
+               cash_content = CashContext(CashReturn(300, 100))
+           return cash_content
+   
+       print init_cash_accept('正常收费').get_result(400)
+       print init_cash_accept('打8折').get_result(400)
+       print init_cash_accept('满300返100').get_result(400)
+   
+   
+   ```
+
+   4.工厂模式和策略模式结合
+
+   ```python
+   # encoding: utf-8
+   import math
+   
+   
+   # 现金收费基类
+   class CashSuper(object):
+       def accept_cash(self, money):
+           raise NotImplementedError
+   
+   
+   # 正常收费子类
+   class CashNormal(CashSuper):
+       def accept_cash(self, money):
+           return money
+       
+       def CashType():
+           return "正常收费"
+   
+   
+   # 打折收费子类
+   class CashRebate(CashSuper):
+       def __init__(self, rebate=1.0):
+           self._rebate = rebate
+   
+       def accept_cash(self, money):
+           return money * self._rebate
+       
+       def CashType():
+           return "打8折"
+   
+   
+   # 返利收费子类
+   class CashReturn(CashSuper):
+       def __init__(self, condition=0, money_return=0):
+           self._condition = condition
+           self._return = money_return
+   
+       def accept_cash(self, money):
+           result = money
+           if money >= self._condition:
+               result = money - math.floor(money / self._condition) * self._return
+           return result
+       
+       def CashType():
+           return "满300返100"
+   
+   
+   # 上下文类，维护一个对收费模型的引用
+   class CashContext(object):
+       def __init__(self, cash_type):
+           self._cash_type = cash_type
+           self.cash_type_instance = None
+           self.init_cash_accept()
+           self.cash_type_instance_list = []
+   
+       def init_cash_accept(self):
+           if self._cash_type == '正常收费':
+               self.cash_type_instance = CashNormal()
+           elif self._cash_type == '打8折':
+               self.cash_type_instance = CashRebate(0.8)
+           elif self._cash_type == '满300返100':
+               self.cash_type_instance = CashReturn(300, 100)
+               
+       def add_cash_type_instance(cash_type):
+           if isinstance(cash_type, CashSuper):
+               self.cash_type_instance_list.append(cash_type)
+           else:
+               pass
+   
+       def get_result(self, money):
+           return self.cash_type_instance.accept_cash(money)
+   
+   
+   if __name__ == '__main__':
+       print CashContext('正常收费').get_result(400)
+       print CashContext('打8折').get_result(400)
+       print CashContext('满300返100').get_result(400)
+   ```
+
+   
+
+   
 
 ### 9. 设计模式六大原则
 https://www.cnblogs.com/huansky/p/13700861.html
@@ -498,8 +731,12 @@ Flask框架特点:
 紧急处理事件：
 1. pod网络不通
 2. nginx配置导致https访问出现异常
-3. 
 
+优化点：
+
+1. 部分集群增加了多master节点保证集群稳定性
+2. nginx增加缓存文件保证启动正常
+3. dockerfile构建优化
 
 ## 保时捷
 
@@ -508,6 +745,28 @@ Flask框架特点:
 + Always： 容器失效是，自动重启该pod，这是默认值
 + OnFailure： 容器停止运行且退出码不为0时重启
 + Never：不论状态为何，都不重启该容器
+
+Pod中容器启动过程
+
++ initContainer容器：
+  + 多个initC顺序启动，前一个启动成功后才启动下一个；
+  + 仅当最后一个initC执行完毕后，才会启动主容器；
+  + 常用于进行初始化操作或等待依赖的服务已ok；
+
++ postStart钩子：
+  - postStart与container的主进程**并行执行**；
+  - 在postStart执行完毕前，容器一直是waiting状态，pod一直是pending状态；
+  - 若postStart运行失败，容器会被杀死；
++ startupProbe钩子：
+  - v1.16版本后新增的探测方式；
+  - 若配置了startupProbe，就会先禁止其他探测，直到成功为止；
++ readinessProbe探针：
+  - 探测容器状态是否ready，准备好接收用户流量；
+  - 探测成功后，将pod的endpoint添加到service；
++ livenessProbe探针：
+  - 探测容器的健康状态，若探测失败，则按照重启策略进行重启；
++ containers:
+  - 多个container之间是顺序启动的，参考[源码](https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/kuberuntime/kuberuntime_manager.go#L835)；
 
 ### 2. 怎么限制pod的资源
 
@@ -595,9 +854,278 @@ kubectl autoscale deployment nginx-deployment --max=5 --min=1 --cpu-percent=10
 
 ### kubernetes中有哪些污点
 
-### kubernetes中打在什么资源上
+taint污点
+
+```bash
+kubectl taint node k8s-01 key=value:NoSchedule
+kubectl taint node k8s-02 key=value:NoExecute
+kubectl taint node k8s-03 key=value:PreferNoSchedule
+```
+
++ NoSchedule不能容忍新的pod调度过来，但是之前运行在node节点中的pod不受影响
++ NoExecute不能容忍新的pod调度过来，老的pod也会被quzhu
++ PreferNoScheduler尽量不调度到污点节点中去
+
+node控制器当某种条件条成立时，会自动的给node打上污点。下面是其中内置的污点：
+
+```bash
+node.kubernetes.io/not-ready:node # node不是ready状态，对应于node的condition ready=false
+node.kubernetes.io/unreachable:node # controller与node失联了，对应于node的condition ready=unknow
+node.kubernetes.io/out-of-disk:node # 磁盘空间不足了
+node.kubernetes.io/network-unavaliable:node # node的网断了
+node.kubernetes.io/unschedulable:node  # node不是可调度状态
+# 是由外部云提供商提供的时候，刚开始
+# 刚开始的时候会打上这个污点来标记还未被使用。当cloud-controller-manager控制器初始化完这个node，kubelet会自动移除这个污点。
+node.cloudprovider.kubernetes.io/uninitalized:kubelet 
+```
+
+
+
+### kubernetes中污点打在什么资源上
+
+污点打在node节点上，防止pod调度到该节点上
+
+容忍度tolerations配置在pod资源上，可以调度到某些节点上
 
 ### docker如何镜像加速
 
+查号阿里云加速镜像服务器的地址
+
+修改/etc/docker/daemon.json文件，在"registry-mirrors"字段中追加阿里云的镜像服务器地址，重启docker
+
 ### ingress配置高可用
+
+ingress-nginxcontroller控制器部署的时候使用daemonset的方式部署，然后再node上添加label，daemonset控制器中配置pod模板的时候，指定要部署的节点。同时该节点不要调度其他pod，防止争抢资源。
+
+### kube-dns
+
+https://www.jianshu.com/p/6ce87f35a081
+
+https://www.cnblogs.com/Bjwf125/p/14633127.html
+
+```bash
+# 1、找到容器ID，并打印它的NS ID
+docker inspect --format "{{.State.Pid}}"  16938de418ac
+# 2、进入此容器的网络Namespace
+nsenter -n -t  54438
+# 3、抓DNS包
+tcpdump -i eth0 udp dst port 53|grep youku.com
+```
+
+DNS策略(dnsPolicy)
+
++ None
++ default
++ ClusterFirst
++ ClusterFirstWithHostNet
+
+## 亿通
+
+### 介绍下你做过的一个python模块
+
+### ansible用过没有？
+
+### 运维如何对软件选型？
+
+运维成本，改造成本，
+
+### 开发新服务的时候，运维人员什么时候参与比较合适
+
+# 脉景
+
+### AJAX跨域问题
+
+1. 浏览器的同源策略：协议、域名、端口号都相同——用户信息安全
+
+2. AJAX跨域：当使用AJAX请求数据时，如果三者中的任意一个不一样，那么就是一个跨域请求
+
+   ```
+   http://teach.mengmacoding.com/interface/letter.php
+   协议：http
+   域名：teach.mengmacoding.com
+   端口号：80
+   ```
+
+3. 跨域的解决方案
+
+   1）设置本地代理服务器：服务器请求资源不受同源策略影响
+
+   原理：将远端的资源请求到本地后再访问
+
+   2） CORS：服务端允许跨域请求——主流解决方案
+
+   ```
+   //告诉浏览器允许所有的域访问
+   //注意 * 不能满足带有cookie的访问,Origin 必须是全匹配
+   //resp.addHeader("Access-Control-Allow-Origin", "*");
+   //解决办法通过获取Origin请求头来动态设置
+   String origin = request.getHeader("Origin");
+   if (StringUtils.hasText(origin)) {
+       resp.addHeader("Access-Control-Allow-Origin", origin);
+   }
+   //允许带有cookie访问
+   resp.addHeader("Access-Control-Allow-Credentials", "true");
+   //告诉浏览器允许跨域访问的方法
+   resp.addHeader("Access-Control-Allow-Methods", "*");
+   //告诉浏览器允许带有Content-Type,header1,header2头的请求访问
+   //resp.addHeader("Access-Control-Allow-Headers", "Content-Type,header1,header2");
+   //设置支持所有的自定义请求头
+   String headers = request.getHeader("Access-Control-Request-Headers");
+   if (StringUtils.hasText(headers)){
+       resp.addHeader("Access-Control-Allow-Headers", headers);
+   }
+   //告诉浏览器缓存OPTIONS预检请求1小时,避免非简单请求每次发送预检请求,提升性能
+   resp.addHeader("Access-Control-Max-Age", "3600");
+   ```
+
+4) 通过nginx解决跨域问题
+
+   跨域是浏览器的问题，浏览器出现跨域问题的时候，会发送两次请求，第一次请求的方法是‘Option’，第二次请求是正常的GET或者POST.
+
+   ```
+   server {
+           listen       8099;
+           server_name  localhost;
+    
+           #charset koi8-r;
+    
+           #access_log  logs/host.access.log  main;
+    
+           location  / {
+   			root   html;
+   			index  index.html index.htm;
+   			# 配置html以文件方式打开
+   			# 配置html以文件方式打开
+   			if ($request_method = 'POST') {
+   				#add_header 'Access-Control-Allow-Origin' '*' always;
+   				add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS,PUT,DELETE,OPTION';
+   				add_header 'Access-Control-Allow-Credentials' 'true';
+   				add_header 'Access-Control-Allow-Headers' 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,Accept,Referer,Accept-Encoding,Accept-Language,Access-Control-Request-Headers,Access-Control-Request-Method,Connection,Host,Origin,Sec-Fetch-Mode';
+   			}
+   			if ($request_method = 'GET') {
+   				#add_header 'Access-Control-Allow-Origin' '*' always;
+   				add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS,PUT,DELETE,OPTION';
+   				add_header 'Access-Control-Allow-Credentials' 'true';
+   				add_header 'Access-Control-Allow-Headers' 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,Accept,Referer,Accept-Encoding,Accept-Language,Access-Control-Request-Headers,Access-Control-Request-Method,Connection,Host,Origin,Sec-Fetch-Mode';
+   			}
+   			if ($request_method = 'OPTIONS') {
+   				add_header 'Access-Control-Allow-Origin' '*' always;
+   				add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS,PUT,DELETE,OPTION';
+   				# 允许带有cookies访问
+   				add_header 'Access-Control-Allow-Credentials' 'true';
+   				add_header 'Access-Control-Allow-Headers' 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,Accept,Referer,Accept-Encoding,Accept-Language,Access-Control-Request-Headers,Access-Control-Request-Method,Connection,Host,Origin,Sec-Fetch-Mode';
+   				return 204;
+   			}
+   			# 代理到ip地址端口
+   			proxy_pass       http://xxxx:xxxx;
+    
+   		}
+    
+           #error_page  404              /404.html;
+    
+           # redirect server error pages to the static page /50x.html
+           #
+           error_page   500 502 503 504  /50x.html;
+       }
+   ```
+
+### Nginx高可用配置
+
+keepalived + 双nginx，高可用模式
+
+### 阿里云负载均衡器介绍
+
+https://blog.csdn.net/javalingyu/article/details/125069476
+
+### python中各种数据结构，以及是否是线程安全的
+
+python的内置类型dict，list，tuple是线程安全
+
+### python中上下文管理器with
+
+```python
+class Connect(object):
+    def __init__(self, filename):
+        self.filename = filename
+
+    # with运行的时候出发此方法的运行
+    def __enter__(self):
+        self.f = open(self.filename)
+        return self.f
+	# with结束后触发此方法的运行
+    # exc_type如果抛出异常这里获取异常的类型
+    # exc_val如果抛出异常，这里获取异常内容
+    # exc_tb如果抛出异常，这里显示所在位置
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print("*"*40)
+        print(exc_type)
+        print("*"*40)
+        print(exc_val)
+        print("*"*40)
+        print(exc_tb)
+        print("with 语句执行之后。。。。。")
+        self.f.close()
+
+with Connect('/etc/passwd') as conn:
+    for i in conn.readlines():
+        print(i)
+    print(2/0)
+```
+```bash
+****************************************
+<class 'ZeroDivisionError'>
+****************************************
+division by zero
+****************************************
+<traceback object at 0x7f71cb37a500>
+with 语句执行之后。。。。。
+Traceback (most recent call last):
+  File "/opt/data/centos-7-51/celery/celery/practice.py", line 26, in <module>
+    print(2/0)
+ZeroDivisionError: division by zero
+```
+
+```python
+try:
+    fp = open(r"/etc/passwd", "r")
+    content = fp.read()
+    print(content)
+finally:
+    fp.close()
+    
+```
+
+### python中的魔法方法
+
+```
+```
+
+### 单例模式
+
+```python
+from datetime import date
+
+class Person(object):
+    def __new__(cls, *arg, **kwargs):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(Person, cls).__new__(cls)
+        return cls.instance
+    
+    def __init(self, name):
+        self.name = name
+```
+
+dockerfile，环境太多了，jwt验证
+
+
+
+
+
+
+
+
+
+
+
+
 
