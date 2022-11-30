@@ -355,7 +355,7 @@ client如何感知到槽位的变化呢？
 
 **redis数据结构的内部编码**
 
-![](/opt-component/redis/images/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%92%8C%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81.png)
+![](./images/redis%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%92%8C%E5%86%85%E9%83%A8%E7%BC%96%E7%A0%81.png)
 
 Redis对象结构体
 
@@ -384,7 +384,7 @@ len(RedisObject) = 16
 len(SDS) = 3
 64 - len(RedisObject) - len(SDS) - 1 = 44;
 
-![](/opt-component/redis/images/redis-str-encoding.png)
+![](./images/redis-str-encoding.png)
 
 **压缩列表**
 
@@ -700,7 +700,7 @@ vm-max-threads 4
 >
 > 分布式的节点往往都是分布在不同的机器上进行网络隔离开的，这意味着必然会有网络断开的风险，这个网络断开的场景的专业词汇叫**网络分区**
 > 网络分区发生的时候，两个分布式节点之间无法进行通信，我们对一个节点进行的修改无法同步到另一个节点中。所以数据的**一致性**无法满足，因为两个分布式节点的数据不在保持一致。除非我们牺牲**可用性**，就是暂停分布式节点服务，在网络分区发生时，不在提供修改数据的功能，直到网络完全恢复正常再继续对外服务。
-> ![vartar](/opt-component/redis/images/redis-cap.png)
+> ![vartar](./images/redis-cap.png)
 > 一句话概括就是——**网络发生分区时，一致性和可用性两难全**。
 
 **强一致性：** 保证写入后可以立即读取
@@ -720,7 +720,7 @@ scan遍历顺序非常特别。采用了高位进位加法来遍历，采用这�
 高位进位加法从左边加，进位往右边移动，同普通加法正好相反。但是最终他们都会遍历所有的槽位并且没有重复
 
 **字典扩容**
-![var](/opt-component/redis/images/redis-rehash.png)
+![var](./images/redis-rehash.png)
 
 **扩容条件，缩容条件**
 扩容条件：正常情况下当hash表中元素的个数等于一维数组的长度时，会开始扩容，扩容的新数组是原来数组的2倍，若redis正在做bgsave，为了减少内存页的过多分离，Redis尽量不去扩容； 如果hash表已经非常满了，元素个数达到了一维数组的5倍，这个时候会强制扩容

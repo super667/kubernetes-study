@@ -244,6 +244,8 @@ ip netns exec nstest ping 10.0.0.1
 
 ![](./images/tcp.png)
 
+![tcp](./images/tcp.png)
+
 
 ### 常问面试题
 
@@ -337,4 +339,76 @@ net.core.somaxconn = 5                # 设置全连接队列的大小
 8. TCP握手的目的有哪些？
 9. TCP 拥塞控制？慢启动的时候窗口在什么情况下会增长？为什么会呈指数增长？
 
-## Cgroup
+## 提升权限相关
+
+### SUID
+
+当以下命令具有SUID权限时，是非常危险的
+
+> Note:
+>
+> 1. SUID只能设置二进制可执行文件
+> 2. 命令执行者要有该文件的执行权限
+> 3. 命令执行者执行二进制文件时会获得程序的属主身份
+> 4. SUID权限只在程序执行过程中有效
+
+给一个二进制文件赋予可执行权限：
+
+```bash
+chmod u+s "文件"
+```
+
+查找具有suid权限的文件
+
+```bash
+find / -perm -u=s -type f 2>/dev/null
+```
+
+以cat命令为例：
+
+```bash
+[wxc@centos-7-60 ~]$ cat /etc/shadow   # 普通用户通常情况下不能查看/etc/shadow文件
+cat: /etc/shadow: Permission denied
+[wxc@centos-7-60 ~]$
+[wxc@centos-7-60 ~]$ exit
+logout
+[root@centos-7-60 shell]# which cat
+/usr/bin/cat
+[root@centos-7-60 shell]# chmod u+s /usr/bin/cat  # 使用root用户增加了s权限
+[root@centos-7-60 shell]# su - wxc
+Last login: Thu Nov 17 20:51:30 CST 2022 on pts/0
+[wxc@centos-7-60 ~]$ cat /etc/shadow     # 普通用户可以访问/etc/shadow文件了
+root:$6$VVgFH5K0kCuBu0/A$eGyPqwR/WgDi.rrDXQGYuhxmDsl8988gi7AoUvxFAuECPJyWzTUrVeMCJz/kH2Hp4nDy9wi3Q0yzCRzo3gLsU/::0:99999:7:::
+bin:*:18353:0:99999:7:::
+...
+bird:!!:19161::::::
+[wxc@centos-7-60 ~]$
+[wxc@centos-7-60 ~]$
+
+```
+
+### SGID
+
+linux中当目录具有SGID权限时，任何用户在该目录中创建的文件将自动继承该目录的所属组。
+
+```
+[root@centos-7-60 tmp]# chmod g+s test/
+[root@centos-7-60 tmp]# find . -perm -g=s
+./test
+[root@centos-7-60 tmp]# su - wxc
+Last login: Thu Nov 17 20:52:10 CST 2022 on pts/0
+[wxc@centos-7-60 ~]$ cd /tmp/test/
+[wxc@centos-7-60 test]$ touch a.txt
+[wxc@centos-7-60 test]$ ls -al
+total 4
+drwxrwsrwx   2 root root   19 Nov 17 21:06 .
+drwxrwxrwt. 38 root root 4096 Nov 17 21:06 ..
+-rw-rw-r--   1 wxc  root    0 Nov 17 21:06 a.txt
+```
+
+### Capability
+
+**原理：** 将之前超级用户root关联的特权细分为不同的功能组，capabilites作为线程的属性存在，每个功能都可以独立启用和禁用。其本质就是将内核调用分门别类，具有相似功能的内核调用被分到同一组中。
+
+这样一来检查权限就变成了：在执行特权操作的时候，如果线程的有效身份不是root，就去检查其是否具有该特权所对应的capabilities，并以此为依据决定是否执行特权操作。
+

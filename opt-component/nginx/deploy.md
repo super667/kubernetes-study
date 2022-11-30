@@ -24,7 +24,7 @@ nginx_substitutions_filter
     proxy_set_header Accept-Encoding "";
 
   配置示例：
-  
+
     location / {
         subs_filter_types text/html text/css text/xml;
         subs_filter st(\d*).example.com $1.example.com ir;
@@ -42,4 +42,37 @@ nginx_substitutions_filter
     default: *subs_filter_types text/html*
     context: *http, server, location*
 
-    
+
+​    
+
+### if指令的条件表达式
+
+1. 检查变量为空或者值为0，直接使用
+2. 将变量与字符做匹配，使用=或者！=
+3. 将变量与正则表达式做匹配
+   + 大小写敏感，~或者！~
+   + 大小写不敏感，~\*或者！~\*
+4. 检查文件是否存在，使用-f或者!-f
+5. 检查目录是否存在，使用-d或者!-d
+6. 检查文件，目录，软链接是否存在，使用-e或者!-e
+7. 检查是否为可执行文件，使用-x或者!-x
+
+```bash
+# 示例
+if ($http_user_agent ~ MSIE) { 
+rewrite ^(.*)$ /msie/$1 break; 
+} 
+if ($http_cookie ~* "id=([^;]+)(?:;|$)") { 
+set $id $1; 
+} 
+if ($request_method = POST) { 
+return 405; 
+} 
+if ($slow) { 
+limit_rate 10k; 
+} 
+if ($invalid_referer) { 
+return 403; 
+}
+```
+

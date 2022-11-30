@@ -283,6 +283,11 @@ Jenkins服务器按指定的时间间隔检查共享的Git存储库，然后将�
 
 这个项目的最初目的是重新思考Jenkins的用户体验，通过对开发团队重要的信息来建模和展示软件交付过程。只需尽可能少的点击即可完成次操作，同时仍然忠于Jenkins的核心可扩展性。虽然此项目出图开发的Alpha阶段，但目的是让Jenkins用户可以通过插件与Jenkins Classic UI 并排安装Blue Ocean
 
+## jenkins都用了哪些插件
+
++ ssh remote hosts可以在远程服务器上执行脚本
++ role strategy plugin 用来精细化管理权限
+
 # 高级问
 
 ## 什么是连续测试
@@ -333,3 +338,16 @@ Jenkins服务器按指定的时间间隔检查共享的Git存储库，然后将�
 # DevOps
 
 https://www.zhihu.com/question/58702398
+
+# 实践
+
+## jenkins api
+
+```bash
+curl -X POST http://wangxianchao:11287cae6180ffbadcab625e43f68bd426@10.4.7.200:9091/createItem?name=prometheus-started-copy --header "Content-Type:text/xml" --data-binary @config.xml
+```
+
++ wangxianchao： 用户名
++ 11287cae6180ffbadcab625e43f68bd426： 用户API token
++ http://10.4.7.200:9091/createItem: jenkins地址
++ prometheus-started-copy：新建Job名称

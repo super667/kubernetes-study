@@ -112,6 +112,7 @@ generate生成器，dict原理，可变类型和非可变类型，变量的声�
 ### 4. linux中文件权限相关的
 ls、lsattr、setcap
 selinux(有空就看)
+
 ### 5. 快排算法原理
 ### 6. copy、deepcopy
 ### 7. 各个数据接口代码中的使用场景举例（元组）
@@ -132,6 +133,9 @@ selinux(有空就看)
 ### 2. 项目使用的web框架介绍
 ### 3. python的垃圾回收机制
 https://baijiahao.baidu.com/s?id=1713030534901127703&wfr=spider&for=pc
+
+https://blog.csdn.net/weixin_43662553/article/details/125294885
+
 python的GC模块主要运用了引用计数来跟踪和回收垃圾；通过标记-清除解决容器对象可能产生的循环引用问题；通过分代回收以空间换时间进一步提高垃圾回收的效率
 
 #### 引用计数
@@ -199,7 +203,8 @@ import sys
 高可用相关
 
 ### 1. pod创建流程
-![pod_create](/images/pod_create.png)
+<img src="./images/pod_create.png" alt="pod_create" style="zoom:150%;" />
+
 ### 2. docker构建规范，常用指令
 
 ```
@@ -347,9 +352,7 @@ server {
 
 
 ### 6. celery框架流程
-![](/images/celery.webp)
-
-![](D:\GlobalData\Codes\kubernetes-study\images\celery.webp)
+![](./images/celery.webp)
 
 celery组件如下：
 Celery Beat:任务调度器
@@ -359,6 +362,51 @@ Producer：调用了Celery提供的API，函数或者装饰器而产生任务并
 Result Backend: 任务处理完后保存状态信息，以供查询。celery默认已支持redis，Rabbitmq，MongoDB，等方式
 
 ### 7. 服务的认证服务jwt，go版本
+
+```
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/golang-jwt/jwt"
+)
+
+var mySigningKey = []byte("asfasfdafasdfdasfa.")
+
+func main() {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"name": "wangxianchao",
+		"exp":  time.Now().Unix() + 5,
+		"iss":  "sywdebug",
+	})
+
+	tokenString, err := token.SignedString(mySigningKey)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+	fmt.Println("加密后的token字符串", tokenString)
+	time.Sleep(time.Second * 10)
+	//在这里如果也使用jwt.ParseWithClaims的话，第二个参数就写jwt.MapClaims{}
+	//例如jwt.ParseWithClaims(tokenString, jwt.MapClaims{},func(t *jwt.Token) (interface{}, error){}
+
+	token, err = jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		return mySigningKey, nil
+	})
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+	fmt.Println("token:", token)
+	fmt.Println("token.Claims:", token.Claims)
+	fmt.Println(token.Claims.(jwt.MapClaims)["name"])
+
+}
+```
+
 ### 8. 常用的设计模式
 
 1. 单例模式
@@ -714,6 +762,9 @@ Flask框架特点:
 + 跟非关系型的数据库结合远远优于Django框架
 
 ### 13. golang的模型
+
+
+
 ### 14. csrf
 ### 15. ELK线上如何批量修改配置，而不影响服务
 
@@ -820,9 +871,23 @@ kubectl autoscale deployment nginx-deployment --max=5 --min=1 --cpu-percent=10
 
 ### 1.pvc，pvc的区别以及都有什么策略
 
+| 模式          | 解释                                                   |
+| ------------- | ------------------------------------------------------ |
+| ReadWriteOnce | 可读可写，但只支持单个节点挂载                         |
+| ReadOnlyOnce  | 只读，可以被多个节点挂载                               |
+| ReadWriteMany | 多路可读可写，这种存储方式以读写的方式被多个节点共享。 |
+
+不是每一种存储都支持这三种方式，像共享方式，目前支持的还是比较少，比较常用的是NFS，在PVC绑定PV时通常根据两个条件来绑定，一个是存储的大小，一个是访问模式
+
+
+
 ### 2.pod的重启策略
 
 ### 3.kuberntes中都有哪些健康检查
+
++ livenessProbe，存活性检测，正常情况下显示POD Running状态
++ readnessProbe，就绪性检测，当正常情况下回显示ready状态正常，加入到svc后端
++ startupProbe，启动检测，开始的时候只启动startupProbe，其他检测不生效
 
 ### 4.如何使用etcd作为服务发现
 
@@ -924,6 +989,8 @@ DNS策略(dnsPolicy)
 ## 亿通
 
 ### 介绍下你做过的一个python模块
+
++ 服务的部署，
 
 ### ansible用过没有？
 
@@ -1113,15 +1180,80 @@ class Person(object):
             cls.instance = super(Person, cls).__new__(cls)
         return cls.instance
     
-    def __init(self, name):
+    def __init__(self, name):
         self.name = name
 ```
 
 dockerfile，环境太多了，jwt验证
 
+## GO jwt
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/golang-jwt/jwt"
+)
+
+var mySigningKey = []byte("asfasfdafasdfdasfa.")
+
+func main() {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"name": "wangxianchao",
+		"exp":  time.Now().Unix() + 5,
+		"iss":  "sywdebug",
+	})
+
+	tokenString, err := token.SignedString(mySigningKey)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+	fmt.Println("加密后的token字符串", tokenString)
+	time.Sleep(time.Second * 10)
+	//在这里如果也使用jwt.ParseWithClaims的话，第二个参数就写jwt.MapClaims{}
+	//例如jwt.ParseWithClaims(tokenString, jwt.MapClaims{},func(t *jwt.Token) (interface{}, error){}
+
+	token, err = jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		return mySigningKey, nil
+	})
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+	fmt.Println("token:", token)
+	fmt.Println("token.Claims:", token.Claims)
+	fmt.Println(token.Claims.(jwt.MapClaims)["name"])
+
+}
+```
 
 
 
+优势：执行力不错，领导给的任务都可以完成
+
+缺点：我对应应聘岗位的知识深度和广度还有一点距离，应聘的岗位主要使用go语言，如果针对k8s二级开发的话，需要加强这方面的学习
+
+为什么来中兴：我目前的工作运维开发岗位，使用到的技术知识，跟公司招聘的岗位有很大的重合度，非常合适。另外我也想在云平台或者虚拟化相关的方向发展。中兴公司在全国也是比较有名的企业，平台比较大。
+
+职业规划：
+
+描述你朋友是个什么样的人：值得信赖的人，值得学习的人，
+
+2. 一类朋友，乐观开朗，喜欢运动，很会享受生活的一个人
+3. 一类朋友，工作狂，技术狂，
+
+注意与HR互动：
+
+评价一下当前团队有哪些优点和缺点：
+
+优点：每个人技术方面的特长说下
+
+缺点：技术气氛不是很强，所用的技术框架跟市场上主流的有些区别，跟公司的整体架构耦合性比较强，
 
 
 
